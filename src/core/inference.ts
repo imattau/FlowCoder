@@ -1,4 +1,4 @@
-import { getLlama, LlamaChatSession, type LlamaModel, type LlamaContext } from "node-llama-cpp";
+import { getLlama, LlamaChatSession, LlamaLogLevel, type LlamaModel, type LlamaContext } from "node-llama-cpp";
 
 export class InferenceEngine {
   private model: LlamaModel | null = null;
@@ -9,6 +9,11 @@ export class InferenceEngine {
   private lastTokenCount: number = 0;
 
   async init(model: LlamaModel) {
+    // This is called globally once but ensure we are using disabled log level
+    await getLlama({
+        logLevel: LlamaLogLevel.disabled
+    });
+    
     this.model = model;
     this.context = await this.model.createContext();
     this.session = new LlamaChatSession({

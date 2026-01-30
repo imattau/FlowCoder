@@ -7,7 +7,10 @@ import { ModelManager } from "./core/model-manager.js";
 import { InferenceEngine } from "./core/inference.js";
 import { ChatLoop } from "./core/chat-loop.js";
 import { StateManager } from "./core/state.js";
+import { LlamaLogLevel } from "node-llama-cpp";
 import readline from "readline";
+import ora from "ora";
+import chalk from "chalk";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const pkg = JSON.parse(readFileSync(join(__dirname, "../package.json"), "utf8"));
@@ -15,7 +18,6 @@ const pkg = JSON.parse(readFileSync(join(__dirname, "../package.json"), "utf8"))
 export function createCli() {
   const program = new Command();
   const modelManager = new ModelManager();
-  const engine = new InferenceEngine();
   const stateManager = new StateManager();
 
   program
@@ -27,15 +29,17 @@ export function createCli() {
     .command("init")
     .description("Initialize FlowCoder environment and download models")
     .action(async () => {
-      console.log("Initializing FlowCoder...");
+      const spinner = ora(chalk.cyan("Initializing FlowCoder...")).start();
       try {
-        console.log("Downloading default model (1.5B)...");
+        spinner.text = chalk.cyan("Downloading default model (1.5B)...");
         await modelManager.downloadDefaultModel();
-        console.log("Downloading tiny model (0.5B)...");
+        
+        spinner.text = chalk.cyan("Downloading tiny model (0.5B)...");
         await modelManager.downloadTinyModel();
-        console.log("Models ready.");
+        
+        spinner.succeed(chalk.green("Environment ready."));
       } catch (err: any) {
-        console.error("Failed to initialize:", err.message);
+        spinner.fail(chalk.red(`Failed to initialize: ${err.message}`));
         process.exit(1);
       }
     });
@@ -46,7 +50,7 @@ export function createCli() {
     .action((description) => {
       const id = Date.now().toString();
       const task = stateManager.createTask(id, description);
-      console.log(`Task started: ${task.description} (ID: ${task.id})`);
+      console.log(chalk.blue(`\n🚀 Task started: ${chalk.bold(task.description)} (ID: ${task.id})`));
     });
 
   program
@@ -58,23 +62,28 @@ export function createCli() {
       const tinyModelPath = modelManager.getModelPath(CONFIG.TINY_MODEL_FILE);
 
       if (!modelPath) {
-        const isDownloaded = await modelManager.isModelDownloaded();
-        if (!isDownloaded) {
-          console.log("Default model not found. Running init...");
-          modelPath = await modelManager.downloadDefaultModel();
+        if (!(await modelManager.isModelDownloaded())) {
+            const spinner = ora(chalk.yellow("Default model not found. Downloading...")).start();
+            modelPath = await modelManager.downloadDefaultModel();
+            spinner.succeed();
         } else {
-          modelPath = modelManager.getModelPath();
+            modelPath = modelManager.getModelPath();
         }
       }
 
-      // Ensure tiny model exists
       if (!(await modelManager.isModelDownloaded(CONFIG.TINY_MODEL_FILE))) {
-          console.log("Tiny model not found. Downloading...");
+          const spinner = ora(chalk.yellow("Tiny model not found. Downloading...")).start();
           await modelManager.downloadTinyModel();
+          spinner.succeed();
       }
 
-      console.log(`Loading models...`);
+      const spinner = ora({
+        text: chalk.cyan("Loading AI Models..."),
+        discardStdin: false
+      }).start();
+
       try {
+        const engine = new InferenceEngine();
         const model = await modelManager.loadModel(modelPath);
         await engine.init(model);
 
@@ -83,13 +92,13 @@ export function createCli() {
         await tinyEngine.init(tinyModel);
 
         const chatLoop = new ChatLoop(engine, tinyEngine);
-
-        console.log("Model loaded. Type 'exit' to quit.");
+        spinner.succeed(chalk.green("FlowCoder ready. Type 'exit' to quit."));
+        console.log(chalk.dim("------------------------------------------"));
 
         const rl = readline.createInterface({
           input: process.stdin,
           output: process.stdout,
-          prompt: "flowcoder> ",
+          prompt: chalk.bold.magenta("flowcoder> "),
         });
 
         rl.prompt();
@@ -102,33 +111,29 @@ export function createCli() {
           }
 
           if (input) {
-            process.stdout.write("AI: ");
             try {
-              await chatLoop.processInput(input, (token) => {
-                process.stdout.write(token);
-              });
-              process.stdout.write("\n");
+              await chatLoop.processInput(input);
             } catch (err: any) {
-              console.error("\nError during chat:", err.message);
+              console.error(chalk.red(`\nError during chat: ${err.message}`));
             }
           }
           rl.prompt();
         }).on("close", () => {
-          console.log("Exiting chat...");
+          console.log(chalk.cyan("\n👋 Happy coding!"));
           process.exit(0);
         });
       } catch (err: any) {
-        console.error("Failed to load model:", err.message);
+        spinner.fail(chalk.red(`Failed to load models: ${err.message}`));
         process.exit(1);
       }
     });
 
   program
     .command("config")
-    .description("View or modify configuration")
+    .description("View current configuration")
     .action(() => {
-        console.log("Current Configuration:");
-        console.log(JSON.stringify(CONFIG, null, 2));
+        console.log(chalk.bold("\n🛠️  Current Configuration:"));
+        console.log(chalk.dim(JSON.stringify(CONFIG, null, 2)));
     });
 
   return program;

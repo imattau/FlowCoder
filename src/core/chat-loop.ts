@@ -7,6 +7,8 @@ import { AgentFactory } from "./agents/factory.js";
 import { PlannerAgent, CoderAgent, DebugAgent } from "./agents/base.js";
 import { execSync } from "child_process";
 import { discoverProjectCommands, type ProjectCommands } from "./discovery.js";
+import ora from "ora";
+import chalk from "chalk";
 
 export class ChatLoop {
   private history: { role: "user" | "assistant" | "system", content: string }[] = [];
@@ -36,16 +38,13 @@ export class ChatLoop {
   private runVerification(): { success: boolean, output: string } {
     let combinedOutput = "";
     try {
-      // 1. Lint Check
       combinedOutput += `[LINTING: ${this.commands.lint}]\n`;
       try {
         combinedOutput += execSync(this.commands.lint, { encoding: "utf-8", stdio: "pipe" });
       } catch (e: any) {
         combinedOutput += `Lint Failed:\n${e.stdout?.toString() || ""}\n${e.stderr?.toString() || ""}\n`;
-        // We don't necessarily stop here, as build might provide more info
       }
       
-      // 2. Build/Type Check
       combinedOutput += `\n[BUILDING: ${this.commands.build}]\n`;
       combinedOutput += execSync(this.commands.build, { encoding: "utf-8", stdio: "pipe" });
       
@@ -56,7 +55,7 @@ export class ChatLoop {
     }
   }
 
-  async processInput(input: string, onToken?: (token: string) => void): Promise<void> {
+  async processInput(input: string): Promise<void> {
     this.history.push({ role: "user", content: input });
     
     let isComplete = false;
@@ -66,36 +65,46 @@ export class ChatLoop {
     while (!isComplete && turnCount < maxTurns) {
       turnCount++;
       
-      if (onToken) onToken(`\x1b[2m[Planning...]\x1b[0m `);
+      const spinner = ora({
+          text: chalk.dim("Thinking..."),
+          discardStdin: false
+      }).start();
+
       const planner = this.agents.getAgent<PlannerAgent>("planner");
       const assistantResponse = await planner.run(input, this.history.map(h => `${h.role}: ${h.content}`));
       
-      if (onToken) onToken(`\n${assistantResponse}\n`);
-      this.history.push({ role: "assistant", content: assistantResponse });
-
+      spinner.stop();
+      
+      // Print AI Response (non-tool part)
       const toolCall = PromptManager.parseToolCall(assistantResponse);
+      const plainText = assistantResponse.replace(/<tool_call>[\s\S]*?<\/tool_call>/, "").trim();
+      
+      if (plainText) {
+          console.log(chalk.blue.bold("AI: ") + plainText);
+      }
+
       if (toolCall) {
         // Validation
         const validation = this.guard.validateToolCall(toolCall.name, toolCall.parameters);
         if (!validation.safe) {
           const errorMsg = `Error: Tool call rejected. ${validation.reason}`;
-          if (onToken) onToken(`\n\x1b[31m[${errorMsg}]\x1b[0m\n`);
+          console.log(chalk.red(`\n✖ ${errorMsg}`));
           this.history.push({ role: "system", content: errorMsg });
           continue;
         }
 
         // Confirmation for destructive/shell commands
         if (toolCall.name === "run_cmd" || toolCall.name === "cache_global_ref") {
-          const confirmed = await this.guard.confirmCommand(toolCall.name === "run_cmd" ? toolCall.parameters.command : `Cache URL \${toolCall.parameters.url} as '\${toolCall.parameters.name}' globally`);
+          const confirmed = await this.guard.confirmCommand(toolCall.name === "run_cmd" ? toolCall.parameters.command : `Cache URL ${toolCall.parameters.url} as '${toolCall.parameters.name}' globally`);
           if (!confirmed) {
             const msg = "User rejected tool execution.";
-            if (onToken) onToken(`\n\x1b[31m[${msg}]\x1b[0m\n`);
+            console.log(chalk.yellow(`\n⚠ ${msg}`));
             this.history.push({ role: "system", content: msg });
             continue;
           }
         }
 
-        if (onToken) onToken(`\n\x1b[33m[Executing Tool: ${toolCall.name}]\x1b[0m\n`);
+        const toolSpinner = ora(chalk.yellow(`Executing Tool: ${chalk.bold(toolCall.name)}...`)).start();
         
         const tool = tools[toolCall.name];
         if (tool) {
@@ -104,33 +113,36 @@ export class ChatLoop {
             const formattedResult = PromptManager.formatToolResult(result);
             this.history.push({ role: "system", content: formattedResult });
             
-            if (onToken) onToken(`\x1b[32m[Tool Result Received]\x1b[0m\n`);
+            toolSpinner.succeed(chalk.green(`Tool Completed: ${toolCall.name}`));
 
             // SELF-HEALING & DEBUGGING
             if (toolCall.name === "write_file" || toolCall.name === "patch_file") {
-              if (onToken) onToken(`\x1b[36m[Auto-Verifying Changes (Lint + Build)...]\x1b[0m\n`);
+              const verifySpinner = ora(chalk.cyan("Auto-Verifying Changes...")).start();
               
               const verification = this.runVerification();
               
               if (verification.success) {
-                if (onToken) onToken(`\x1b[32m[Verification Passed]\x1b[0m\n`);
+                verifySpinner.succeed(chalk.green("Verification Passed."));
               } else {
-                // DELEGATE TO DEBUG AGENT
-                if (onToken) onToken(`\x1b[31m[Verification Failed. Consulting Debugger...]\x1b[0m\n`);
+                verifySpinner.fail(chalk.red("Verification Failed."));
+                
+                const debugSpinner = ora(chalk.magenta("Consulting Debugger Agent...")).start();
                 const debuggerAgent = this.agents.getAgent<DebugAgent>("debugger");
                 const analysis = await debuggerAgent.run(verification.output);
+                debugSpinner.stop();
                 
                 const debugMsg = `Debugger Analysis: ${analysis}\nPlease fix and verify again.`;
-                if (onToken) onToken(`\n\x1b[35m[${debugMsg}]\x1b[0m\n`);
+                console.log(chalk.magenta.bold("\n🔍 Debugger: ") + analysis);
                 this.history.push({ role: "system", content: debugMsg });
               }
             }
           } catch (err: any) {
             const errorMsg = `Error executing tool: ${err.message}`;
+            toolSpinner.fail(chalk.red(errorMsg));
             this.history.push({ role: "system", content: errorMsg });
-            if (onToken) onToken(`\n\x1b[31m[${errorMsg}]\x1b[0m\n`);
           }
         } else {
+          toolSpinner.fail(chalk.red(`Tool ${toolCall.name} not found.`));
           this.history.push({ role: "system", content: `Error: Tool ${toolCall.name} not found.` });
         }
       } else {

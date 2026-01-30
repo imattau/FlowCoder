@@ -1,8 +1,9 @@
-import { downloadFile } from "@huggingface/hub";
 import { CONFIG } from "../config.js";
 import { existsSync, mkdirSync, createWriteStream } from "fs";
 import { join } from "path";
 import { getLlama } from "node-llama-cpp";
+import { Readable } from "stream";
+import { finished } from "stream/promises";
 
 export class ModelManager {
   private modelsDir: string;
@@ -28,32 +29,30 @@ export class ModelManager {
       return targetPath;
     }
 
-    console.log(`Downloading model \${fileName} from \${repo}...`);
+    const url = `https://huggingface.co/${repo}/resolve/main/${fileName}`;
+    console.log(`Downloading model ${fileName} from ${repo}...`);
+    console.log(`URL: ${url}`);
     
-    const response = await downloadFile({
-      repo: repo as any,
-      path: fileName,
-    }) as any;
+    const response = await fetch(url);
 
-    if (!response || !response.body) {
+    if (!response.ok) {
+      throw new Error(`Failed to download model: ${response.statusText} (${response.status})`);
+    }
+
+    if (!response.body) {
       throw new Error("Failed to download model: No response body");
     }
 
     const writer = createWriteStream(targetPath);
-    const reader = response.body.getReader();
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      writer.write(value);
-    }
-
-    writer.end();
+    // Convert Web Stream to Node Stream
+    const nodeReadable = Readable.fromWeb(response.body as any);
     
-    return new Promise((resolve, reject) => {
-      writer.on("finish", () => resolve(targetPath));
-      writer.on("error", reject);
-    });
+    nodeReadable.pipe(writer);
+
+    await finished(writer);
+    
+    console.log(`\nSuccessfully downloaded ${fileName}`);
+    return targetPath;
   }
 
   async downloadDefaultModel(): Promise<string> {
