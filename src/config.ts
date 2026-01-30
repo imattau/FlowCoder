@@ -20,5 +20,11 @@ export const CONFIG = {
   
   // Context settings
   DEFAULT_CONTEXT_SIZE: 4096,
+
+  // MCP Servers
+  MCP_SERVERS: {
+    // Example: "filesystem": { command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/search"] }
+  } as Record<string, { command: string, args: string[], env?: Record<string, string> }>
 };
+
 

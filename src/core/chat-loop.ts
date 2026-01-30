@@ -4,7 +4,8 @@ import { tools } from "./tools.js";
 import { StateManager } from "./state.js";
 import { CommandGuard } from "./command-guard.js";
 import { AgentFactory } from "./agents/factory.js";
-import { PlannerAgent, CoderAgent, DebugAgent } from "./agents/base.js";
+import { PlannerAgent, DebugAgent } from "./agents/base.js";
+import { McpHost } from "./mcp/host.js";
 import { execSync } from "child_process";
 import { discoverProjectCommands, type ProjectCommands } from "./discovery.js";
 import ora from "ora";
@@ -16,6 +17,7 @@ export class ChatLoop {
   private guard: CommandGuard;
   private agents: AgentFactory;
   private commands: ProjectCommands;
+  private mcp: McpHost;
 
   constructor(
     private defaultEngine: InferenceEngine,
@@ -25,6 +27,7 @@ export class ChatLoop {
     this.stateManager = new StateManager(cwd);
     this.guard = new CommandGuard(cwd);
     this.commands = discoverProjectCommands(cwd);
+    this.mcp = new McpHost();
     this.agents = new AgentFactory({
         "default": defaultEngine,
         "tiny": tinyEngine,
@@ -32,7 +35,15 @@ export class ChatLoop {
         "coder": defaultEngine,
         "debugger": tinyEngine
     });
-    this.history.push({ role: "system", content: PromptManager.getSystemPrompt() });
+  }
+
+  async init() {
+      await this.mcp.init();
+      // Inject system prompt with discovered tools
+      this.history.push({
+          role: "system", 
+          content: PromptManager.getSystemPrompt(this.mcp.getTools()) 
+      });
   }
 
   private runVerification(): { success: boolean, output: string } {
@@ -75,7 +86,6 @@ export class ChatLoop {
       
       spinner.stop();
       
-      // Print AI Response (non-tool part)
       const toolCall = PromptManager.parseToolCall(assistantResponse);
       const plainText = assistantResponse.replace(/<tool_call>[\s\S]*?<\/tool_call>/, "").trim();
       
@@ -93,7 +103,7 @@ export class ChatLoop {
           continue;
         }
 
-        // Confirmation for destructive/shell commands
+        // Confirmation
         if (toolCall.name === "run_cmd" || toolCall.name === "cache_global_ref") {
           const confirmed = await this.guard.confirmCommand(toolCall.name === "run_cmd" ? toolCall.parameters.command : `Cache URL ${toolCall.parameters.url} as '${toolCall.parameters.name}' globally`);
           if (!confirmed) {
@@ -106,48 +116,52 @@ export class ChatLoop {
 
         const toolSpinner = ora(chalk.yellow(`Executing Tool: ${chalk.bold(toolCall.name)}...`)).start();
         
-        const tool = tools[toolCall.name];
-        if (tool) {
-          try {
-            const result = await tool.execute(toolCall.parameters);
-            const formattedResult = PromptManager.formatToolResult(result);
-            this.history.push({ role: "system", content: formattedResult });
-            
-            toolSpinner.succeed(chalk.green(`Tool Completed: ${toolCall.name}`));
-
-            // SELF-HEALING & DEBUGGING
-            if (toolCall.name === "write_file" || toolCall.name === "patch_file") {
-              const verifySpinner = ora(chalk.cyan("Auto-Verifying Changes...")).start();
-              
-              const verification = this.runVerification();
-              
-              if (verification.success) {
-                verifySpinner.succeed(chalk.green("Verification Passed."));
-              } else {
-                verifySpinner.fail(chalk.red("Verification Failed."));
-                
-                const debugSpinner = ora(chalk.magenta("Consulting Debugger Agent...")).start();
-                const debuggerAgent = this.agents.getAgent<DebugAgent>("debugger");
-                const analysis = await debuggerAgent.run(verification.output);
-                debugSpinner.stop();
-                
-                const debugMsg = `Debugger Analysis: ${analysis}\nPlease fix and verify again.`;
-                console.log(chalk.magenta.bold("\n🔍 Debugger: ") + analysis);
-                this.history.push({ role: "system", content: debugMsg });
-              }
-            }
-          } catch (err: any) {
-            const errorMsg = `Error executing tool: ${err.message}`;
-            toolSpinner.fail(chalk.red(errorMsg));
-            this.history.push({ role: "system", content: errorMsg });
+        try {
+          let result: string;
+          
+          // Route to Internal or MCP
+          if (tools[toolCall.name]) {
+            result = await (tools[toolCall.name] as any).execute(toolCall.parameters);
+          } else {
+            result = await this.mcp.callTool(toolCall.name, toolCall.parameters);
           }
-        } else {
-          toolSpinner.fail(chalk.red(`Tool ${toolCall.name} not found.`));
-          this.history.push({ role: "system", content: `Error: Tool ${toolCall.name} not found.` });
+
+          const formattedResult = PromptManager.formatToolResult(result);
+          this.history.push({ role: "system", content: formattedResult });
+          
+          toolSpinner.succeed(chalk.green(`Tool Completed: ${toolCall.name}`));
+
+          // Verification Loop
+          if (toolCall.name === "write_file" || toolCall.name === "patch_file") {
+            const verifySpinner = ora(chalk.cyan("Auto-Verifying Changes...")).start();
+            const verification = this.runVerification();
+            
+            if (verification.success) {
+              verifySpinner.succeed(chalk.green("Verification Passed."));
+            } else {
+              verifySpinner.fail(chalk.red("Verification Failed."));
+              const debugSpinner = ora(chalk.magenta("Consulting Debugger Agent...")).start();
+              const debuggerAgent = this.agents.getAgent<DebugAgent>("debugger");
+              const analysis = await debuggerAgent.run(verification.output);
+              debugSpinner.stop();
+              
+              const debugMsg = `Debugger Analysis: ${analysis}\nPlease fix and verify again.`;
+              console.log(chalk.magenta.bold("\n🔍 Debugger: ") + analysis);
+              this.history.push({ role: "system", content: debugMsg });
+            }
+          }
+        } catch (err: any) {
+          const errorMsg = `Error executing tool: ${err.message}`;
+          toolSpinner.fail(chalk.red(errorMsg));
+          this.history.push({ role: "system", content: errorMsg });
         }
       } else {
         isComplete = true;
       }
     }
+  }
+
+  async cleanup() {
+      await this.mcp.cleanup();
   }
 }

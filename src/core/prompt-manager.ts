@@ -1,5 +1,12 @@
 import { tools } from "./tools.js";
 
+export interface ToolMetadata {
+    name: string;
+    description?: string;
+    parameters?: any;
+    inputSchema?: any; // For MCP
+}
+
 export class PromptManager {
   private static SYSTEM_PROMPT = "You are FlowCoder, a local AI coding assistant.\n" +
 "You have access to the following tools to interact with the codebase:\n\n" +
@@ -14,10 +21,16 @@ export class PromptManager {
 "Always prefer local commands and reading files to understand context.\n" +
 "Be concise and professional.";
 
-  static getSystemPrompt(): string {
-    const descriptions = Object.values(tools).map(t => {
+  static getSystemPrompt(mcpTools: ToolMetadata[] = []): string {
+    const internalTools = Object.values(tools).map(t => {
       return `- ${t.name}: ${t.description}\n  Parameters: ${JSON.stringify(t.parameters)}`;
-    }).join("\n");
+    });
+
+    const externalTools = mcpTools.map(t => {
+        return `- ${t.name}: ${t.description}\n  Parameters Schema: ${JSON.stringify(t.inputSchema)}`;
+    });
+
+    const descriptions = [...internalTools, ...externalTools].join("\n");
 
     return this.SYSTEM_PROMPT.replace("{{TOOL_DESCRIPTIONS}}", descriptions);
   }

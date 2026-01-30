@@ -10,4 +10,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [Mini-Agent Orchestration](./tracks/mini-agents/index.md) - Using specialized mini-models for sub-tasks.
 
+- [MCP Integration](./tracks/mcp-integration/index.md) - Migrating to Model Context Protocol for universal tool support.
+
+
+
 

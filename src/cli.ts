@@ -92,6 +92,8 @@ export function createCli() {
         await tinyEngine.init(tinyModel);
 
         const chatLoop = new ChatLoop(engine, tinyEngine);
+        await chatLoop.init();
+
         spinner.succeed(chalk.green("FlowCoder ready. Type 'exit' to quit."));
         console.log(chalk.dim("------------------------------------------"));
 
@@ -118,7 +120,8 @@ export function createCli() {
             }
           }
           rl.prompt();
-        }).on("close", () => {
+        }).on("close", async () => {
+          await chatLoop.cleanup();
           console.log(chalk.cyan("\n👋 Happy coding!"));
           process.exit(0);
         });
