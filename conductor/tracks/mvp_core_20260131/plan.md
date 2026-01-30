@@ -13,9 +13,9 @@
 - [x] Task: Integrate `node-llama-cpp` [1ed137c]
     - [x] Write Tests: Mock inference engine and verify model loading logic
     - [x] Implement Feature: Set up the inference engine to load a GGUF model from a local path
-- [ ] Task: Implement 'chat' command logic
-    - [ ] Write Tests: Verify prompt handling and response buffering
-    - [ ] Implement Feature: Create the interactive chat loop and stream model output to the terminal
+- [x] Task: Implement 'chat' command logic [ab03142]
+    - [x] Write Tests: Verify prompt handling and response buffering
+    - [x] Implement Feature: Create the interactive chat loop and stream model output to the terminal
 - [ ] Task: Conductor - User Manual Verification 'Local Inference Integration' (Protocol in workflow.md)
 
 ## Phase 3: Refinement & MVP Wrap-up
