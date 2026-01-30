@@ -1,0 +1,25 @@
+# Implementation Plan - mvp_core_20260131: FlowCoder MVP
+
+## Phase 1: Foundation & CLI Setup
+- [ ] Task: Initialize project structure and TypeScript configuration
+    - [ ] Create `package.json` and install dependencies (typescript, ts-node, @types/node)
+    - [ ] Set up `tsconfig.json`
+- [ ] Task: Implement basic CLI structure
+    - [ ] Write Tests: Define expected CLI command behavior
+    - [ ] Implement Feature: Create entry point and a simple 'hello' or 'version' command using Commander.js
+- [ ] Task: Conductor - User Manual Verification 'Foundation & CLI Setup' (Protocol in workflow.md)
+
+## Phase 2: Local Inference Integration
+- [ ] Task: Integrate `node-llama-cpp`
+    - [ ] Write Tests: Mock inference engine and verify model loading logic
+    - [ ] Implement Feature: Set up the inference engine to load a GGUF model from a local path
+- [ ] Task: Implement 'chat' command logic
+    - [ ] Write Tests: Verify prompt handling and response buffering
+    - [ ] Implement Feature: Create the interactive chat loop and stream model output to the terminal
+- [ ] Task: Conductor - User Manual Verification 'Local Inference Integration' (Protocol in workflow.md)
+
+## Phase 3: Refinement & MVP Wrap-up
+- [ ] Task: Basic error handling and user feedback
+    - [ ] Write Tests: Ensure helpful error messages for missing model files or inference failures
+    - [ ] Implement Feature: Add graceful error handling and performance indicators (inference speed)
+- [ ] Task: Conductor - User Manual Verification 'Refinement & MVP Wrap-up' (Protocol in workflow.md)
