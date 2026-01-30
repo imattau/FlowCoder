@@ -101,11 +101,12 @@ export const tools: Record<string, Tool> = {
 
   list_symbols: {
     name: "list_symbols",
-    description: "Recursively list important symbols (functions, classes, exports) in the project.",
+    description: "Recursively list important symbols (functions, classes, exports) and type definitions in the project.",
     parameters: {},
     execute: () => {
       try {
-        const output = execSync('rg --no-heading --line-number "(export (const|class|function|interface|type)|function \w+)" src/', { encoding: "utf-8" });
+        // Find exports and type definitions in src and node_modules types
+        const output = execSync('rg --no-heading --line-number "(export (const|class|function|interface|type)|function \w+|declare (class|namespace|module|type))" src/ ', { encoding: "utf-8" });
         return output || "No symbols found.";
       } catch (err: any) {
         return `Error listing symbols: ${err.message}`;
@@ -125,7 +126,27 @@ export const tools: Record<string, Tool> = {
         return output;
       } catch (err: any) {
         if (err.status === 1) return "No matches found.";
-        return `Error running search: ${err.message}. Ensure ripgrep (rg) is installed.`;
+        return `Error running search: \${err.message}. Ensure ripgrep (rg) is installed.`;
+      }
+    }
+  },
+
+  inspect_library: {
+    name: "inspect_library",
+    description: "Search for type definitions or header files of an installed library to verify its API.",
+    parameters: {
+      name: { type: "string", description: "Name of the library (e.g., 'express', 'lodash')." }
+    },
+    execute: (args: { name: string }) => {
+      try {
+        // Search in node_modules for .d.ts files related to the library
+        const searchPath = join("node_modules", args.name);
+        if (!existsSync(searchPath)) return `Error: Library '\${args.name}' not found in node_modules.`;
+        
+        const output = execSync(`find \${searchPath} -name "*.d.ts" | head -n 10`, { encoding: "utf-8" });
+        return `Found the following type definitions for \${args.name}:\n\${output}\nYou can now use read_file on these paths to see the API contract.`;
+      } catch (err: any) {
+        return `Error inspecting library: \${err.message}`;
       }
     }
   },

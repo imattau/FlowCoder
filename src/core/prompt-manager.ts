@@ -9,6 +9,8 @@ export class PromptManager {
 "{\"name\": \"tool_name\", \"parameters\": {\"param1\": \"value1\"}}\n" +
 "</tool_call>\n\n" +
 "After you receive the tool result, continue your response or provide a final answer.\n" +
+"STRICT RULE: Do not invent APIs or library functions. If you are unsure of a signature, use `search`, `read_file`, or `fetch_url` to verify.\n" +
+"Always prefer local type definitions (.d.ts) or header files to understand library contracts.\n" +
 "Always prefer local commands and reading files to understand context.\n" +
 "Be concise and professional.";
 

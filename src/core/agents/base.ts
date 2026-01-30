@@ -6,16 +6,18 @@ export abstract class BaseAgent {
 }
 
 export class PlannerAgent extends BaseAgent {
-  private static PROMPT = `You are the Orchestrator. Your job is to analyze the user request and decide which tools to use.
-If you need more information, use search or read_file.
-If you are ready to implement, use patch_file or write_file.
-Always verify your work.`;
+  private static PROMPT = "You are the Orchestrator. Your job is to analyze the user request and decide which tools to use.\n" +
+"If the task involves a library you don't know perfectly, use inspect_library first.\n" +
+"If you need more information, use search, read_file, or fetch_url.\n" +
+"If you are ready to implement, use patch_file or write_file.\n" +
+"Always verify your work.";
 
   async run(input: string, history: string[] = []): Promise<string> {
-    const fullPrompt = `${PlannerAgent.PROMPT}
+    const fullPrompt = `
+    ${PlannerAgent.PROMPT}
 
 History:
-${history.join("\n")}
+${history.join("\n")} 
 
 User: ${input}
 Assistant:`
@@ -24,11 +26,13 @@ Assistant:`
 }
 
 export class CoderAgent extends BaseAgent {
-  private static PROMPT = `You are the Coder. Your job is to provide precise code patches.
-Use the patch_file tool exclusively if possible.`;
+  private static PROMPT = "You are the Coder. Your job is to provide precise code patches.\n" +
+"STRICT RULE: Do not guess APIs. If you are modifying code that uses an external library, ensure you have seen its definition via read_file or inspect_library.\n" +
+"Use the patch_file tool exclusively if possible.";
 
   async run(input: string): Promise<string> {
-    const fullPrompt = `${CoderAgent.PROMPT}
+    const fullPrompt = `
+    ${CoderAgent.PROMPT}
 
 Task: ${input}
 Assistant:`
@@ -37,12 +41,14 @@ Assistant:`
 }
 
 export class DebugAgent extends BaseAgent {
-  private static PROMPT = `You are the Debugger. Your job is to analyze error messages, logs, and stack traces.
-Identify the root cause of the failure and suggest a specific fix.
-Do not write code yourself; instead, provide a concise explanation of what needs to change for the Coder.`;
+  private static PROMPT = "You are the Debugger. Your job is to analyze error messages, logs, and stack traces.\n" +
+"Identify if the failure is caused by an API mismatch or hallucinated function call.\n" +
+"If it is, use inspect_library or search to find the correct API signature.\n" +
+"Provide a concise explanation of the fix for the Coder.";
 
   async run(errorLog: string): Promise<string> {
-    const fullPrompt = `${DebugAgent.PROMPT}
+    const fullPrompt = `
+    ${DebugAgent.PROMPT}
 
 Error Log:
 ${errorLog}
