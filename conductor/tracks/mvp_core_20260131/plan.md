@@ -1,9 +1,9 @@
 # Implementation Plan - mvp_core_20260131: FlowCoder MVP
 
 ## Phase 1: Foundation & CLI Setup
-- [ ] Task: Initialize project structure and TypeScript configuration
-    - [ ] Create `package.json` and install dependencies (typescript, ts-node, @types/node)
-    - [ ] Set up `tsconfig.json`
+- [x] Task: Initialize project structure and TypeScript configuration [14db11e]
+    - [x] Create `package.json` and install dependencies (typescript, ts-node, @types/node)
+    - [x] Set up `tsconfig.json`
 - [ ] Task: Implement basic CLI structure
     - [ ] Write Tests: Define expected CLI command behavior
     - [ ] Implement Feature: Create entry point and a simple 'hello' or 'version' command using Commander.js
