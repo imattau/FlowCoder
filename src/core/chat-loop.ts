@@ -23,11 +23,29 @@ export class ChatLoop {
     this.agents = new AgentFactory({
         "default": defaultEngine,
         "tiny": tinyEngine,
-        "planner": defaultEngine, // Can be configured to tinyEngine if desired
+        "planner": defaultEngine,
         "coder": defaultEngine,
         "debugger": tinyEngine
     });
     this.history.push({ role: "system", content: PromptManager.getSystemPrompt() });
+  }
+
+  private runVerification(): { success: boolean, output: string } {
+    let combinedOutput = "";
+    try {
+      // 1. Lint Check
+      combinedOutput += "[LINTING]\n";
+      combinedOutput += execSync("npm run lint", { encoding: "utf-8" });
+      
+      // 2. Build/Type Check
+      combinedOutput += "\n[BUILDING]\n";
+      combinedOutput += execSync("npm run build", { encoding: "utf-8" });
+      
+      return { success: true, output: combinedOutput };
+    } catch (err: any) {
+      combinedOutput += `\nERROR:\n${err.stdout?.toString() || ""}\n${err.stderr?.toString() || ""}`;
+      return { success: false, output: combinedOutput };
+    }
   }
 
   async processInput(input: string, onToken?: (token: string) => void): Promise<void> {
@@ -40,7 +58,6 @@ export class ChatLoop {
     while (!isComplete && turnCount < maxTurns) {
       turnCount++;
       
-      // 1. PLANNING PHASE (Planner Agent)
       if (onToken) onToken(`\x1b[2m[Planning...]\x1b[0m `);
       const planner = this.agents.getAgent<PlannerAgent>("planner");
       const assistantResponse = await planner.run(input, this.history.map(h => `${h.role}: ${h.content}`));
@@ -83,17 +100,17 @@ export class ChatLoop {
 
             // SELF-HEALING & DEBUGGING
             if (toolCall.name === "write_file" || toolCall.name === "patch_file") {
-              if (onToken) onToken(`\x1b[36m[Auto-Verifying Changes...]\x1b[0m\n`);
-              try {
-                execSync("npm run build", { stdio: "pipe" });
+              if (onToken) onToken(`\x1b[36m[Auto-Verifying Changes (Lint + Build)...]\x1b[0m\n`);
+              
+              const verification = this.runVerification();
+              
+              if (verification.success) {
                 if (onToken) onToken(`\x1b[32m[Verification Passed]\x1b[0m\n`);
-              } catch (err: any) {
-                const errorLog = `${err.stdout?.toString() || ""}\n${err.stderr?.toString() || ""}`;
-                
+              } else {
                 // DELEGATE TO DEBUG AGENT
                 if (onToken) onToken(`\x1b[31m[Verification Failed. Consulting Debugger...]\x1b[0m\n`);
                 const debuggerAgent = this.agents.getAgent<DebugAgent>("debugger");
-                const analysis = await debuggerAgent.run(errorLog);
+                const analysis = await debuggerAgent.run(verification.output);
                 
                 const debugMsg = `Debugger Analysis: ${analysis}\nPlease fix and verify again.`;
                 if (onToken) onToken(`\n\x1b[35m[${debugMsg}]\x1b[0m\n`);
