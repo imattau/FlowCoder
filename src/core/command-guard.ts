@@ -43,6 +43,10 @@ export class CommandGuard {
       }
     }
 
+    if (name === "cache_global_ref") {
+        return { safe: true }; // Will require confirmation in ChatLoop
+    }
+
     return { safe: true };
   }
 }

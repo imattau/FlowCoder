@@ -85,10 +85,10 @@ export class ChatLoop {
         }
 
         // Confirmation for destructive/shell commands
-        if (toolCall.name === "run_cmd") {
-          const confirmed = await this.guard.confirmCommand(toolCall.parameters.command);
+        if (toolCall.name === "run_cmd" || toolCall.name === "cache_global_ref") {
+          const confirmed = await this.guard.confirmCommand(toolCall.name === "run_cmd" ? toolCall.parameters.command : `Cache URL \${toolCall.parameters.url} as '\${toolCall.parameters.name}' globally`);
           if (!confirmed) {
-            const msg = "User rejected command execution.";
+            const msg = "User rejected tool execution.";
             if (onToken) onToken(`\n\x1b[31m[${msg}]\x1b[0m\n`);
             this.history.push({ role: "system", content: msg });
             continue;

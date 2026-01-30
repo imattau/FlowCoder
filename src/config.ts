@@ -8,6 +8,7 @@ export const CONFIG = {
   // Subdirectories
   MODELS_DIR: join(homedir(), ".flowcoder", "models"),
   TASKS_DIR: join(homedir(), ".flowcoder", "tasks"),
+  GLOBAL_REFS_DIR: join(homedir(), ".flowcoder", "global_references"),
   
   // Default configuration
   DEFAULT_MODEL_REPO: "Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF",

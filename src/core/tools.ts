@@ -2,6 +2,9 @@ import { readFileSync, readdirSync, statSync, existsSync, writeFileSync } from "
 import { join, relative } from "path";
 import { execSync } from "child_process";
 import * as diff from "diff";
+import { GlobalStateManager } from "./global-state.js";
+
+const globalState = new GlobalStateManager();
 
 export interface Tool {
   name: string;
@@ -66,7 +69,7 @@ export const tools: Record<string, Tool> = {
         // Show Diff
         const patch = diff.createPatch(args.path, content, newContent);
         console.log("\n--- DIFF ---");
-        patch.split("\n").forEach(line => {
+        patch.split("\n").forEach((line: string) => {
           if (line.startsWith("+")) console.log(`\x1b[32m${line}\x1b[0m`);
           else if (line.startsWith("-")) console.log(`\x1b[31m${line}\x1b[0m`);
           else console.log(line);
@@ -105,7 +108,6 @@ export const tools: Record<string, Tool> = {
     parameters: {},
     execute: () => {
       try {
-        // Find exports and type definitions in src and node_modules types
         const output = execSync('rg --no-heading --line-number "(export (const|class|function|interface|type)|function \w+|declare (class|namespace|module|type))" src/ ', { encoding: "utf-8" });
         return output || "No symbols found.";
       } catch (err: any) {
@@ -126,7 +128,7 @@ export const tools: Record<string, Tool> = {
         return output;
       } catch (err: any) {
         if (err.status === 1) return "No matches found.";
-        return `Error running search: \${err.message}. Ensure ripgrep (rg) is installed.`;
+        return `Error running search: ${err.message}. Ensure ripgrep (rg) is installed.`;
       }
     }
   },
@@ -139,14 +141,13 @@ export const tools: Record<string, Tool> = {
     },
     execute: (args: { name: string }) => {
       try {
-        // Search in node_modules for .d.ts files related to the library
         const searchPath = join("node_modules", args.name);
-        if (!existsSync(searchPath)) return `Error: Library '\${args.name}' not found in node_modules.`;
+        if (!existsSync(searchPath)) return `Error: Library '${args.name}' not found in node_modules.`;
         
-        const output = execSync(`find \${searchPath} -name "*.d.ts" | head -n 10`, { encoding: "utf-8" });
-        return `Found the following type definitions for \${args.name}:\n\${output}\nYou can now use read_file on these paths to see the API contract.`;
+        const output = execSync(`find ${searchPath} -name "*.d.ts" | head -n 10`, { encoding: "utf-8" });
+        return `Found the following type definitions for ${args.name}:\n${output}\nYou can now use read_file on these paths to see the API contract.`;
       } catch (err: any) {
-        return `Error inspecting library: \${err.message}`;
+        return `Error inspecting library: ${err.message}`;
       }
     }
   },
@@ -182,6 +183,43 @@ export const tools: Record<string, Tool> = {
       } catch (err: any) {
         return `Error fetching URL: ${err.message}`;
       }
+    }
+  },
+
+  cache_global_ref: {
+    name: "cache_global_ref",
+    description: "Download a URL and store it in global references for future re-use across projects.",
+    parameters: {
+      url: { type: "string", description: "The URL to download." },
+      name: { type: "string", description: "A unique name for this reference (e.g. 'react-query-v5')." }
+    },
+    execute: async (args: { url: string, name: string }) => {
+      try {
+        const response = await fetch(args.url);
+        if (!response.ok) return `Error fetching URL: ${response.statusText}`;
+        const text = await response.text();
+        const content = text.replace(/<[^>]*>?/gm, "");
+        globalState.saveReference(args.name, content, args.url);
+        return `Successfully cached '${args.name}' globally.`;
+      } catch (err: any) {
+        return `Error caching global reference: ${err.message}`;
+      }
+    }
+  },
+
+  use_global_ref: {
+    name: "use_global_ref",
+    description: "Retrieve a previously cached global reference by name.",
+    parameters: {
+      name: { type: "string", description: "The name of the reference to retrieve." }
+    },
+    execute: (args: { name: string }) => {
+      const content = globalState.getReference(args.name);
+      if (!content) {
+        const available = globalState.listGlobalReferences().join(", ");
+        return `Error: Global reference '${args.name}' not found. Available: ${available || "None"}`;
+      }
+      return content;
     }
   },
 
