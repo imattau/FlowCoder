@@ -1,8 +1,0 @@
-{
-  "track_id": "mvp_core_20260131",
-  "type": "feature",
-  "status": "new",
-  "created_at": "2026-01-31T12:00:00Z",
-  "updated_at": "2026-01-31T12:00:00Z",
-  "description": "Create the MVP: Build the core CLI, integrate local GGUF inference, and implement a basic chat interface."
-}

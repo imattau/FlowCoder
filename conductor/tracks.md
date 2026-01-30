@@ -3,3 +3,5 @@
 This file tracks all major tracks for the project. Each track has its own detailed plan in its respective folder.
 
 ---
+
+- [Core CLI Implementation](./tracks/core-cli-implementation/index.md) - Initial development of the FlowCoder CLI engine.
