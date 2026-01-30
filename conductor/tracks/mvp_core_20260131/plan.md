@@ -9,14 +9,14 @@
     - [x] Implement Feature: Create entry point and a simple 'hello' or 'version' command using Commander.js
 - [x] Task: Conductor - User Manual Verification 'Foundation & CLI Setup' (Protocol in workflow.md)
 
-## Phase 2: Local Inference Integration
+## Phase 2: Local Inference Integration [checkpoint: f3f98e7]
 - [x] Task: Integrate `node-llama-cpp` [1ed137c]
     - [x] Write Tests: Mock inference engine and verify model loading logic
     - [x] Implement Feature: Set up the inference engine to load a GGUF model from a local path
 - [x] Task: Implement 'chat' command logic [ab03142]
     - [x] Write Tests: Verify prompt handling and response buffering
     - [x] Implement Feature: Create the interactive chat loop and stream model output to the terminal
-- [ ] Task: Conductor - User Manual Verification 'Local Inference Integration' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Local Inference Integration' (Protocol in workflow.md)
 
 ## Phase 3: Refinement & MVP Wrap-up
 - [ ] Task: Basic error handling and user feedback
