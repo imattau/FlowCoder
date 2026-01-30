@@ -6,12 +6,14 @@ import { CommandGuard } from "./command-guard.js";
 import { AgentFactory } from "./agents/factory.js";
 import { PlannerAgent, CoderAgent, DebugAgent } from "./agents/base.js";
 import { execSync } from "child_process";
+import { discoverProjectCommands, type ProjectCommands } from "./discovery.js";
 
 export class ChatLoop {
   private history: { role: "user" | "assistant" | "system", content: string }[] = [];
   private stateManager: StateManager;
   private guard: CommandGuard;
   private agents: AgentFactory;
+  private commands: ProjectCommands;
 
   constructor(
     private defaultEngine: InferenceEngine,
@@ -20,6 +22,7 @@ export class ChatLoop {
   ) {
     this.stateManager = new StateManager(cwd);
     this.guard = new CommandGuard(cwd);
+    this.commands = discoverProjectCommands(cwd);
     this.agents = new AgentFactory({
         "default": defaultEngine,
         "tiny": tinyEngine,
@@ -34,16 +37,21 @@ export class ChatLoop {
     let combinedOutput = "";
     try {
       // 1. Lint Check
-      combinedOutput += "[LINTING]\n";
-      combinedOutput += execSync("npm run lint", { encoding: "utf-8" });
+      combinedOutput += `[LINTING: ${this.commands.lint}]\n`;
+      try {
+        combinedOutput += execSync(this.commands.lint, { encoding: "utf-8", stdio: "pipe" });
+      } catch (e: any) {
+        combinedOutput += `Lint Failed:\n${e.stdout?.toString() || ""}\n${e.stderr?.toString() || ""}\n`;
+        // We don't necessarily stop here, as build might provide more info
+      }
       
       // 2. Build/Type Check
-      combinedOutput += "\n[BUILDING]\n";
-      combinedOutput += execSync("npm run build", { encoding: "utf-8" });
+      combinedOutput += `\n[BUILDING: ${this.commands.build}]\n`;
+      combinedOutput += execSync(this.commands.build, { encoding: "utf-8", stdio: "pipe" });
       
       return { success: true, output: combinedOutput };
     } catch (err: any) {
-      combinedOutput += `\nERROR:\n${err.stdout?.toString() || ""}\n${err.stderr?.toString() || ""}`;
+      combinedOutput += `\nCRITICAL ERROR:\n${err.stdout?.toString() || ""}\n${err.stderr?.toString() || ""}`;
       return { success: false, output: combinedOutput };
     }
   }
