@@ -1,13 +1,13 @@
 # Implementation Plan - mvp_core_20260131: FlowCoder MVP
 
-## Phase 1: Foundation & CLI Setup
+## Phase 1: Foundation & CLI Setup [checkpoint: fbcee5c]
 - [x] Task: Initialize project structure and TypeScript configuration [14db11e]
     - [x] Create `package.json` and install dependencies (typescript, ts-node, @types/node)
     - [x] Set up `tsconfig.json`
 - [x] Task: Implement basic CLI structure [b62f7de]
     - [x] Write Tests: Define expected CLI command behavior
     - [x] Implement Feature: Create entry point and a simple 'hello' or 'version' command using Commander.js
-- [ ] Task: Conductor - User Manual Verification 'Foundation & CLI Setup' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Foundation & CLI Setup' (Protocol in workflow.md)
 
 ## Phase 2: Local Inference Integration
 - [ ] Task: Integrate `node-llama-cpp`
