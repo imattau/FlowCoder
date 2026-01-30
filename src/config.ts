@@ -12,7 +12,12 @@ export const CONFIG = {
   // Default configuration
   DEFAULT_MODEL_REPO: "Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF",
   DEFAULT_MODEL_FILE: "qwen2.5-coder-1.5b-instruct-q4_k_m.gguf",
+
+  // Mini Models for specific agents
+  TINY_MODEL_REPO: "Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF",
+  TINY_MODEL_FILE: "qwen2.5-coder-0.5b-instruct-q4_k_m.gguf",
   
   // Context settings
   DEFAULT_CONTEXT_SIZE: 4096,
 };
+

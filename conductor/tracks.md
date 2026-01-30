@@ -7,3 +7,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 - [Core CLI Implementation](./tracks/core-cli-implementation/index.md) - Initial development of the FlowCoder CLI engine.
 
 - [Autonomy Engine](./tracks/autonomy-engine/index.md) - Transforming FlowCoder into a self-healing "vibecoding" assistant.
+
+- [Mini-Agent Orchestration](./tracks/mini-agents/index.md) - Using specialized mini-models for sub-tasks.
+
+

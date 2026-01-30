@@ -3,19 +3,30 @@ import { PromptManager } from "./prompt-manager.js";
 import { tools } from "./tools.js";
 import { StateManager } from "./state.js";
 import { CommandGuard } from "./command-guard.js";
+import { AgentFactory } from "./agents/factory.js";
+import { PlannerAgent, CoderAgent, DebugAgent } from "./agents/base.js";
 import { execSync } from "child_process";
 
 export class ChatLoop {
   private history: { role: "user" | "assistant" | "system", content: string }[] = [];
   private stateManager: StateManager;
   private guard: CommandGuard;
+  private agents: AgentFactory;
 
   constructor(
-    private engine: InferenceEngine,
+    private defaultEngine: InferenceEngine,
+    private tinyEngine: InferenceEngine,
     cwd: string = process.cwd()
   ) {
     this.stateManager = new StateManager(cwd);
     this.guard = new CommandGuard(cwd);
+    this.agents = new AgentFactory({
+        "default": defaultEngine,
+        "tiny": tinyEngine,
+        "planner": defaultEngine, // Can be configured to tinyEngine if desired
+        "coder": defaultEngine,
+        "debugger": tinyEngine
+    });
     this.history.push({ role: "system", content: PromptManager.getSystemPrompt() });
   }
 
@@ -24,19 +35,17 @@ export class ChatLoop {
     
     let isComplete = false;
     let turnCount = 0;
-    const maxTurns = 10;
+    const maxTurns = 12;
 
     while (!isComplete && turnCount < maxTurns) {
       turnCount++;
       
-      const fullPrompt = this.history.map(m => `${m.role}: ${m.content}`).join("\n") + "\nassistant:";
+      // 1. PLANNING PHASE (Planner Agent)
+      if (onToken) onToken(`\x1b[2m[Planning...]\x1b[0m `);
+      const planner = this.agents.getAgent<PlannerAgent>("planner");
+      const assistantResponse = await planner.run(input, this.history.map(h => `${h.role}: ${h.content}`));
       
-      let assistantResponse = "";
-      await this.engine.generateResponse(fullPrompt, (token) => {
-        assistantResponse += token;
-        if (onToken) onToken(token);
-      });
-
+      if (onToken) onToken(`\n${assistantResponse}\n`);
       this.history.push({ role: "assistant", content: assistantResponse });
 
       const toolCall = PromptManager.parseToolCall(assistantResponse);
@@ -72,16 +81,23 @@ export class ChatLoop {
             
             if (onToken) onToken(`\x1b[32m[Tool Result Received]\x1b[0m\n`);
 
-            // SELF-HEALING: Automatic Verification
+            // SELF-HEALING & DEBUGGING
             if (toolCall.name === "write_file" || toolCall.name === "patch_file") {
               if (onToken) onToken(`\x1b[36m[Auto-Verifying Changes...]\x1b[0m\n`);
               try {
                 execSync("npm run build", { stdio: "pipe" });
                 if (onToken) onToken(`\x1b[32m[Verification Passed]\x1b[0m\n`);
               } catch (err: any) {
-                const errorMsg = `Verification Failed after your change:\n${err.stdout?.toString() || ""}\n${err.stderr?.toString() || ""}\nPlease fix the errors and try again.`;
-                if (onToken) onToken(`\n\x1b[31m[${errorMsg}]\x1b[0m\n`);
-                this.history.push({ role: "system", content: errorMsg });
+                const errorLog = `${err.stdout?.toString() || ""}\n${err.stderr?.toString() || ""}`;
+                
+                // DELEGATE TO DEBUG AGENT
+                if (onToken) onToken(`\x1b[31m[Verification Failed. Consulting Debugger...]\x1b[0m\n`);
+                const debuggerAgent = this.agents.getAgent<DebugAgent>("debugger");
+                const analysis = await debuggerAgent.run(errorLog);
+                
+                const debugMsg = `Debugger Analysis: ${analysis}\nPlease fix and verify again.`;
+                if (onToken) onToken(`\n\x1b[35m[${debugMsg}]\x1b[0m\n`);
+                this.history.push({ role: "system", content: debugMsg });
               }
             }
           } catch (err: any) {

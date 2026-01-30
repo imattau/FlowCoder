@@ -18,9 +18,9 @@ export class ModelManager {
     return existsSync(join(this.modelsDir, fileName));
   }
 
-  async downloadDefaultModel(
-    repo: string = CONFIG.DEFAULT_MODEL_REPO,
-    fileName: string = CONFIG.DEFAULT_MODEL_FILE
+  async downloadModel(
+    repo: string,
+    fileName: string
   ): Promise<string> {
     const targetPath = join(this.modelsDir, fileName);
     
@@ -54,6 +54,14 @@ export class ModelManager {
       writer.on("finish", () => resolve(targetPath));
       writer.on("error", reject);
     });
+  }
+
+  async downloadDefaultModel(): Promise<string> {
+    return this.downloadModel(CONFIG.DEFAULT_MODEL_REPO, CONFIG.DEFAULT_MODEL_FILE);
+  }
+
+  async downloadTinyModel(): Promise<string> {
+    return this.downloadModel(CONFIG.TINY_MODEL_REPO, CONFIG.TINY_MODEL_FILE);
   }
 
   async loadModel(modelPath: string) {

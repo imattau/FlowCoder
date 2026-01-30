@@ -25,12 +25,15 @@ export function createCli() {
 
   program
     .command("init")
-    .description("Initialize FlowCoder environment and download default model")
+    .description("Initialize FlowCoder environment and download models")
     .action(async () => {
       console.log("Initializing FlowCoder...");
       try {
-        const path = await modelManager.downloadDefaultModel();
-        console.log(`Model ready at: ${path}`);
+        console.log("Downloading default model (1.5B)...");
+        await modelManager.downloadDefaultModel();
+        console.log("Downloading tiny model (0.5B)...");
+        await modelManager.downloadTinyModel();
+        console.log("Models ready.");
       } catch (err: any) {
         console.error("Failed to initialize:", err.message);
         process.exit(1);
@@ -52,6 +55,7 @@ export function createCli() {
     .option("-m, --model <path>", "Path to the GGUF model file")
     .action(async (options) => {
       let modelPath = options.model;
+      const tinyModelPath = modelManager.getModelPath(CONFIG.TINY_MODEL_FILE);
 
       if (!modelPath) {
         const isDownloaded = await modelManager.isModelDownloaded();
@@ -63,11 +67,22 @@ export function createCli() {
         }
       }
 
-      console.log(`Loading model from ${modelPath}...`);
+      // Ensure tiny model exists
+      if (!(await modelManager.isModelDownloaded(CONFIG.TINY_MODEL_FILE))) {
+          console.log("Tiny model not found. Downloading...");
+          await modelManager.downloadTinyModel();
+      }
+
+      console.log(`Loading models...`);
       try {
         const model = await modelManager.loadModel(modelPath);
         await engine.init(model);
-        const chatLoop = new ChatLoop(engine);
+
+        const tinyModel = await modelManager.loadModel(tinyModelPath);
+        const tinyEngine = new InferenceEngine();
+        await tinyEngine.init(tinyModel);
+
+        const chatLoop = new ChatLoop(engine, tinyEngine);
 
         console.log("Model loaded. Type 'exit' to quit.");
 
