@@ -1,5 +1,5 @@
 import { downloadFile } from "@huggingface/hub";
-import { CONFIG } from "../config.ts";
+import { CONFIG } from "../config.js";
 import { existsSync, mkdirSync, createWriteStream } from "fs";
 import { join } from "path";
 import { getLlama } from "node-llama-cpp";
@@ -28,12 +28,12 @@ export class ModelManager {
       return targetPath;
     }
 
-    console.log(`Downloading model ${fileName} from ${repo}...`);
+    console.log(`Downloading model \${fileName} from \${repo}...`);
     
     const response = await downloadFile({
       repo: repo as any,
       path: fileName,
-    });
+    }) as any;
 
     if (!response || !response.body) {
       throw new Error("Failed to download model: No response body");

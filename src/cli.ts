@@ -2,11 +2,11 @@ import { Command } from "commander";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { fileURLToPath } from "url";
-import { CONFIG } from "./config.ts";
-import { ModelManager } from "./core/model-manager.ts";
-import { InferenceEngine } from "./core/inference.ts";
-import { ChatLoop } from "./core/chat-loop.ts";
-import { StateManager } from "./core/state.ts";
+import { CONFIG } from "./config.js";
+import { ModelManager } from "./core/model-manager.js";
+import { InferenceEngine } from "./core/inference.js";
+import { ChatLoop } from "./core/chat-loop.js";
+import { StateManager } from "./core/state.js";
 import readline from "readline";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));

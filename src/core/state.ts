@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "fs";
 import { join } from "path";
-import { CONFIG } from "../config.ts";
+import { CONFIG } from "../config.js";
 
 export interface ProjectState {
   name: string;

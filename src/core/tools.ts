@@ -1,6 +1,7 @@
-import { readFileSync, readdirSync, statSync, existsSync } from "fs";
+import { readFileSync, readdirSync, statSync, existsSync, writeFileSync } from "fs";
 import { join, relative } from "path";
 import { execSync } from "child_process";
+import * as diff from "diff";
 
 export interface Tool {
   name: string;
@@ -27,6 +28,59 @@ export const tools: Record<string, Tool> = {
     }
   },
 
+  write_file: {
+    name: "write_file",
+    description: "Write content to a file. Overwrites existing content.",
+    parameters: {
+      path: { type: "string", description: "Path to write to." },
+      content: { type: "string", description: "Full content of the file." }
+    },
+    execute: (args: { path: string, content: string }) => {
+      try {
+        writeFileSync(args.path, args.content);
+        return `Successfully wrote to ${args.path}`;
+      } catch (err: any) {
+        return `Error writing file: ${err.message}`;
+      }
+    }
+  },
+
+  patch_file: {
+    name: "patch_file",
+    description: "Replace a specific block of code in a file using search and replace blocks.",
+    parameters: {
+      path: { type: "string", description: "The relative path to the file." },
+      search: { type: "string", description: "The exact block of code to find." },
+      replace: { type: "string", description: "The new code to replace it with." }
+    },
+    execute: (args: { path: string, search: string, replace: string }) => {
+      try {
+        if (!existsSync(args.path)) return `Error: File not found at ${args.path}`;
+        const content = readFileSync(args.path, "utf-8");
+        if (!content.includes(args.search)) {
+          return "Error: Search block not found in file. Ensure the search block is an EXACT match including whitespace.";
+        }
+        
+        const newContent = content.replace(args.search, args.replace);
+        
+        // Show Diff
+        const patch = diff.createPatch(args.path, content, newContent);
+        console.log("\n--- DIFF ---");
+        patch.split("\n").forEach(line => {
+          if (line.startsWith("+")) console.log(`\x1b[32m${line}\x1b[0m`);
+          else if (line.startsWith("-")) console.log(`\x1b[31m${line}\x1b[0m`);
+          else console.log(line);
+        });
+        console.log("------------\n");
+
+        writeFileSync(args.path, newContent);
+        return `Successfully patched ${args.path}`;
+      } catch (err: any) {
+        return `Error patching file: ${err.message}`;
+      }
+    }
+  },
+
   list_files: {
     name: "list_files",
     description: "List files in a directory.",
@@ -41,6 +95,20 @@ export const tools: Record<string, Tool> = {
         return files.join("\n");
       } catch (err: any) {
         return `Error listing files: ${err.message}`;
+      }
+    }
+  },
+
+  list_symbols: {
+    name: "list_symbols",
+    description: "Recursively list important symbols (functions, classes, exports) in the project.",
+    parameters: {},
+    execute: () => {
+      try {
+        const output = execSync('rg --no-heading --line-number "(export (const|class|function|interface|type)|function \w+)" src/', { encoding: "utf-8" });
+        return output || "No symbols found.";
+      } catch (err: any) {
+        return `Error listing symbols: ${err.message}`;
       }
     }
   },
@@ -89,7 +157,6 @@ export const tools: Record<string, Tool> = {
         const response = await fetch(args.url);
         if (!response.ok) return `Error fetching URL: ${response.statusText}`;
         const text = await response.text();
-        // Basic cleanup of HTML (placeholder for real conversion)
         return text.replace(/<[^>]*>?/gm, "").substring(0, 5000); 
       } catch (err: any) {
         return `Error fetching URL: ${err.message}`;
@@ -112,4 +179,3 @@ export const tools: Record<string, Tool> = {
     }
   }
 };
-

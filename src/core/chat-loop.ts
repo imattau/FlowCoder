@@ -1,8 +1,9 @@
-import { InferenceEngine } from "./inference.ts";
-import { PromptManager } from "./prompt-manager.ts";
-import { tools } from "./tools.ts";
-import { StateManager } from "./state.ts";
-import { CommandGuard } from "./command-guard.ts";
+import { InferenceEngine } from "./inference.js";
+import { PromptManager } from "./prompt-manager.js";
+import { tools } from "./tools.js";
+import { StateManager } from "./state.js";
+import { CommandGuard } from "./command-guard.js";
+import { execSync } from "child_process";
 
 export class ChatLoop {
   private history: { role: "user" | "assistant" | "system", content: string }[] = [];
@@ -64,11 +65,30 @@ export class ChatLoop {
         
         const tool = tools[toolCall.name];
         if (tool) {
-          const result = await tool.execute(toolCall.parameters);
-          const formattedResult = PromptManager.formatToolResult(result);
-          this.history.push({ role: "system", content: formattedResult });
-          
-          if (onToken) onToken(`\x1b[32m[Tool Result Received]\x1b[0m\n`);
+          try {
+            const result = await tool.execute(toolCall.parameters);
+            const formattedResult = PromptManager.formatToolResult(result);
+            this.history.push({ role: "system", content: formattedResult });
+            
+            if (onToken) onToken(`\x1b[32m[Tool Result Received]\x1b[0m\n`);
+
+            // SELF-HEALING: Automatic Verification
+            if (toolCall.name === "write_file" || toolCall.name === "patch_file") {
+              if (onToken) onToken(`\x1b[36m[Auto-Verifying Changes...]\x1b[0m\n`);
+              try {
+                execSync("npm run build", { stdio: "pipe" });
+                if (onToken) onToken(`\x1b[32m[Verification Passed]\x1b[0m\n`);
+              } catch (err: any) {
+                const errorMsg = `Verification Failed after your change:\n${err.stdout?.toString() || ""}\n${err.stderr?.toString() || ""}\nPlease fix the errors and try again.`;
+                if (onToken) onToken(`\n\x1b[31m[${errorMsg}]\x1b[0m\n`);
+                this.history.push({ role: "system", content: errorMsg });
+              }
+            }
+          } catch (err: any) {
+            const errorMsg = `Error executing tool: ${err.message}`;
+            this.history.push({ role: "system", content: errorMsg });
+            if (onToken) onToken(`\n\x1b[31m[${errorMsg}]\x1b[0m\n`);
+          }
         } else {
           this.history.push({ role: "system", content: `Error: Tool ${toolCall.name} not found.` });
         }
