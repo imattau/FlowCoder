@@ -16,7 +16,23 @@ export class McpHost {
   private tools: Map<string, McpTool> = new Map();
 
   async init() {
-    for (const [name, config] of Object.entries(CONFIG.MCP_SERVERS)) {
+    const serversToLoad: Record<string, any> = {};
+
+    // Load defaults if enabled
+    if (CONFIG.MCP_CONFIG.enable_defaults) {
+        for (const [name, cfg] of Object.entries(CONFIG.MCP_CONFIG.defaults)) {
+            if (cfg.enabled) {
+                serversToLoad[name] = cfg;
+            }
+        }
+    }
+
+    // Load custom servers
+    for (const [name, cfg] of Object.entries(CONFIG.MCP_CONFIG.custom_servers)) {
+        serversToLoad[name] = cfg;
+    }
+
+    for (const [name, config] of Object.entries(serversToLoad)) {
       const spinner = ora(chalk.dim(`Connecting to MCP Server: ${name}...`)).start();
       try {
         const env: Record<string, string> = {};
@@ -25,7 +41,7 @@ export class McpHost {
         }
         if (config.env) {
             for (const [k, v] of Object.entries(config.env)) {
-                env[k] = v;
+                env[k] = v as string;
             }
         }
 
@@ -45,7 +61,6 @@ export class McpHost {
         await client.connect(transport);
         this.clients.set(name, client);
 
-        // Discover tools
         const response = await client.listTools();
         for (const tool of response.tools) {
           const mcpTool: McpTool = {

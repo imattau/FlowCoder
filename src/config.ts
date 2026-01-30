@@ -21,10 +21,24 @@ export const CONFIG = {
   // Context settings
   DEFAULT_CONTEXT_SIZE: 4096,
 
-  // MCP Servers
-  MCP_SERVERS: {
-    // Example: "filesystem": { command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/search"] }
-  } as Record<string, { command: string, args: string[], env?: Record<string, string> }>
+  // MCP Configuration
+  MCP_CONFIG: {
+    enable_defaults: true,
+    defaults: {
+      "filesystem": { 
+        enabled: true,
+        command: "npx", 
+        args: ["-y", "@modelcontextprotocol/server-filesystem", process.cwd()] 
+      },
+      "fetch": {
+        enabled: true,
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-fetch"]
+      }
+    },
+    custom_servers: {} as Record<string, { command: string, args: string[], env?: Record<string, string> }>
+  }
 };
+
 
 

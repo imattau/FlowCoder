@@ -135,8 +135,21 @@ export function createCli() {
     .command("config")
     .description("View current configuration")
     .action(() => {
-        console.log(chalk.bold("\n🛠️  Current Configuration:"));
-        console.log(chalk.dim(JSON.stringify(CONFIG, null, 2)));
+        console.log(chalk.bold("\n🛠️  FlowCoder Configuration:"));
+        console.log(chalk.dim(JSON.stringify({
+            FLOWCODER_DIR: CONFIG.FLOWCODER_DIR,
+            MODELS: {
+                default: CONFIG.DEFAULT_MODEL_FILE,
+                tiny: CONFIG.TINY_MODEL_FILE
+            }
+        }, null, 2)));
+
+        console.log(chalk.bold("\n🔌 MCP Servers:"));
+        const servers = { ...CONFIG.MCP_CONFIG.defaults, ...CONFIG.MCP_CONFIG.custom_servers };
+        for (const [name, cfg] of Object.entries(servers)) {
+            const status = (cfg as any).enabled !== false ? chalk.green("enabled") : chalk.red("disabled");
+            console.log(`- \${chalk.cyan(name)}: \${status}`);
+        }
     });
 
   return program;
