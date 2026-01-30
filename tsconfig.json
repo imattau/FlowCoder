@@ -7,7 +7,10 @@
 
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
-    "module": "commonjs",
+    "module": "NodeNext",                                /* Specify what module code is generated. */
+    "rootDir": "./src",                                  /* Specify the root folder within your source files. */
+    "moduleResolution": "NodeNext",                     /* Specify how TypeScript looks up a file from a given module specifier. */
+
     "target": "es2020",
     "types": [],
     // For nodejs:
