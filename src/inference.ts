@@ -1,10 +1,11 @@
-import { getLlama } from "node-llama-cpp";
-import { LlamaChatSession } from "node-llama-cpp";
+import { getLlama, LlamaChatSession } from "node-llama-cpp";
 
 export class LlamaEngine {
   private model: any = null;
   private context: any = null;
   private session: any = null;
+  private lastInferenceTime: number = 0;
+  private lastTokenCount: number = 0;
 
   async loadModel(modelPath: string) {
     const llama = await getLlama();
@@ -21,7 +22,21 @@ export class LlamaEngine {
     if (!this.session) {
       throw new Error("Model not loaded");
     }
-    return await this.session.prompt(prompt);
+    const startTime = performance.now();
+    const response = await this.session.prompt(prompt);
+    this.lastInferenceTime = performance.now() - startTime;
+    this.lastTokenCount = this.model.tokenize(response).length;
+    return response;
+  }
+
+  getMetrics() {
+    const seconds = this.lastInferenceTime / 1000;
+    const tps = seconds > 0 ? this.lastTokenCount / seconds : 0;
+    return {
+      tokensPerSecond: tps,
+      durationMs: this.lastInferenceTime,
+      tokenCount: this.lastTokenCount
+    };
   }
 
   isLoaded(): boolean {

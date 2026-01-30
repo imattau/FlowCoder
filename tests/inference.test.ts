@@ -6,10 +6,13 @@ const mockLlamaChatSession = jest.fn().mockImplementation(() => ({
   prompt: mockPrompt,
 }));
 
+const mockTokenize = jest.fn().mockReturnValue(new Array(10)); // Mock 10 tokens
+
 const mockLoadModel = jest.fn().mockResolvedValue({
   createContext: jest.fn().mockResolvedValue({
     getSequence: jest.fn().mockReturnValue({}),
   }),
+  tokenize: mockTokenize,
 });
 
 const mockGetLlama = jest.fn().mockResolvedValue({
@@ -50,5 +53,16 @@ describe("LlamaEngine", () => {
     
     expect(response).toBe("AI response");
     expect(mockPrompt).toHaveBeenCalledWith("Hello");
+  });
+
+  it("should return performance metrics after generation", async () => {
+    const engine = new LlamaEngine();
+    await engine.loadModel("path/to/model.gguf");
+    await engine.generateResponse("Hello");
+    
+    const metrics = engine.getMetrics();
+    expect(metrics).toBeDefined();
+    expect(metrics).toHaveProperty("tokensPerSecond");
+    expect(metrics.tokenCount).toBe(10);
   });
 });

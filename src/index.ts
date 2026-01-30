@@ -52,6 +52,8 @@ program
           try {
             const response = await engine.generateResponse(input);
             console.log(response);
+            const metrics = engine.getMetrics();
+            console.log(`\x1b[2m(${metrics.tokensPerSecond.toFixed(1)} tokens/sec, ${metrics.durationMs.toFixed(0)}ms)\x1b[0m`);
           } catch (err: any) {
             console.error("Error generating response:", err.message);
           }
