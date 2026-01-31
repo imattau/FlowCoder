@@ -8,11 +8,10 @@ import { IntentAgent, ContextAgent, DispatcherAgent, DebugAgent } from "./agents
 import { McpHost } from "./mcp/host.js";
 import { execSync } from "child_process";
 import { discoverProjectCommands, type ProjectCommands } from "./discovery.js";
-import { TerminalManager } from "./ui/terminal-manager.js";
+import { BlessedUIManager } from "./ui/blessed-ui-manager.js";
 import { calculateCodeMetrics } from "./utils/code-metrics.js";
 import ora from "ora";
 import chalk from "chalk";
-import readline from "readline";
 
 export class ChatLoop {
   private history: { role: "user" | "assistant" | "system", content: string }[] = [];
@@ -22,7 +21,7 @@ export class ChatLoop {
   private commands: ProjectCommands;
   private mcp: McpHost;
   private commandQueue: { name: string, parameters: any }[] = [];
-  private tm: TerminalManager;
+  private ui: BlessedUIManager;
   public isInterrupted: boolean = false; // Flag for interruption
 
   constructor(
@@ -38,7 +37,7 @@ export class ChatLoop {
         "default": defaultEngine,
         "tiny": tinyEngine
     });
-    this.tm = TerminalManager.getInstance();
+    this.ui = BlessedUIManager.getInstance();
   }
 
   async init() {
@@ -82,42 +81,26 @@ ${err.stderr?.toString() || ""}`;
   private async requestQueueApproval(): Promise<"all" | "step" | "abort"> {
       if (this.commandQueue.length === 0) return "abort";
 
-      this.tm.write(chalk.bold.yellow("\n📋 Proposed Command Queue:"));
+      this.ui.write(chalk.bold.yellow("\n📋 Proposed Command Queue:"));
       this.commandQueue.forEach((cmd, idx) => {
-          this.tm.write(`
+          this.ui.write(`
 ${idx + 1}. ${chalk.cyan(cmd.name)}(${chalk.dim(JSON.stringify(cmd.parameters))})`);
       });
 
-      const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stderr // Use process.stderr for readline input to avoid conflict with TM
-      });
-
-      return new Promise((res) => {
-          rl.question(chalk.bold.magenta("\nExecute actions? [(a)ll / (s)tep / (c)ancel]: "), (ans) => {
-              rl.close();
-              const a = ans.toLowerCase();
-              if (a === "a" || a === "all") res("all");
-              else if (a === "s" || a === "step") res("step");
-              else if (a === "c" || a === "cancel") res("abort");
-              else res("abort");
-          });
-      });
+      // Use blessed's input for confirmation
+      const answer = await this.ui.getInputPrompt(chalk.bold.magenta("\nExecute actions? [(a)ll / (s)tep / (c)ancel]: "));
+      const a = answer.toLowerCase();
+      if (a === "a" || a === "all") return "all";
+      else if (a === "s" || a === "step") return "step";
+      else if (a === "c" || a === "cancel") return "abort";
+      else return "abort";
   }
 
   private async askUserPrompt(question: string): Promise<string> {
-      const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stderr
-      });
-      return new Promise((res) => {
-          rl.question(chalk.bold.magenta(`
+      // Use blessed's input for user questions
+      return await this.ui.getInputPrompt(chalk.bold.magenta(`
 ❓ AI Question: ${question}
-Your answer: `), (ans) => {
-              rl.close();
-              res(ans);
-          });
-      });
+Your answer: `));
   }
 
   async processInput(input: string): Promise<void> {
@@ -130,26 +113,26 @@ Your answer: `), (ans) => {
     while (turnCount < maxTurns && !this.isInterrupted) {
       turnCount++;
       
-      this.tm.writeStatusBar(chalk.gray("Status: Analyzing intent..."));
+      this.ui.writeStatusBar(chalk.gray("Status: Analyzing intent..."));
       const intentAgent = this.agents.getAgent<IntentAgent>("intent");
       const intent = await intentAgent.run(input);
-      this.tm.write(chalk.dim(`Intent: ${intent}
+      this.ui.write(chalk.dim(`Intent: ${intent}
 `));
       if (this.isInterrupted) throw new Error("User interrupted.");
 
-      this.tm.writeStatusBar(chalk.gray("Status: Gathering context..."));
+      this.ui.writeStatusBar(chalk.gray("Status: Gathering context..."));
       const contextAgent = this.agents.getAgent<ContextAgent>("context");
       const contextResults = await contextAgent.run(input, intent);
       if (this.isInterrupted) throw new Error("User interrupted.");
       const contextTools = PromptManager.parseToolCalls(contextResults);
       for (const call of contextTools) {
-          this.tm.writeStatusBar(chalk.gray(`Status: Executing context tool ${call.name}`));
+          this.ui.writeStatusBar(chalk.gray(`Status: Executing context tool ${call.name}`));
           const res = await (tools[call.name] as any).execute(call.parameters);
           this.history.push({ role: "system", content: PromptManager.formatToolResult(res) });
           if (this.isInterrupted) throw new Error("User interrupted.");
       }
 
-      this.tm.writeStatusBar(chalk.gray("Status: Planning execution..."));
+      this.ui.writeStatusBar(chalk.gray("Status: Planning execution..."));
       const dispatcher = this.agents.getAgent<DispatcherAgent>("dispatcher");
       const dispatchResponse = await dispatcher.run(input, this.history.map(h => `${h.role}: ${h.content}`));
       if (this.isInterrupted) throw new Error("User interrupted.");
@@ -160,15 +143,15 @@ Your answer: `), (ans) => {
 
       let finalTurnResponse = dispatchResponse;
       if (dispatchResponse.includes("PatchAgent")) {
-          this.tm.writeStatusBar(chalk.cyan("Status: Delegating to PatchAgent (Sniper)..."));
+          this.ui.writeStatusBar(chalk.cyan("Status: Delegating to PatchAgent (Sniper)..."));
           const patcher = this.agents.getAgent<any>("patcher");
           finalTurnResponse = await patcher.run("Context updated in scratchpad.");
       } else if (dispatchResponse.includes("BoilerplateAgent")) {
-          this.tm.writeStatusBar(chalk.cyan("Status: Delegating to BoilerplateAgent (Builder)..."));
+          this.ui.writeStatusBar(chalk.cyan("Status: Delegating to BoilerplateAgent (Builder)..."));
           const builder = this.agents.getAgent<any>("boilerplate");
           finalTurnResponse = await builder.run("Context updated in scratchpad.");
       } else if (dispatchResponse.includes("TemplateAgent")) {
-          this.tm.writeStatusBar(chalk.cyan("Status: Delegating to TemplateAgent (Weaver)..."));
+          this.ui.writeStatusBar(chalk.cyan("Status: Delegating to TemplateAgent (Weaver)..."));
           const weaver = this.agents.getAgent<any>("template");
           finalTurnResponse = await weaver.run("Context updated in scratchpad.");
       }
@@ -178,14 +161,14 @@ Your answer: `), (ans) => {
       const plainText = finalTurnResponse.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "").trim();
       
       if (plainText && !plainText.includes("patch_file")) {
-          this.tm.write(chalk.blue.bold("AI: ") + plainText + "\n");
+          this.ui.write(chalk.blue.bold("AI: ") + plainText + "\n");
       }
 
       if (this.commandQueue.length > 0) {
-          this.tm.writeStatusBar(chalk.gray("Status: Awaiting user approval..."));
+          this.ui.writeStatusBar(chalk.gray("Status: Awaiting user approval..."));
           const mode = await this.requestQueueApproval();
           if (mode === "abort") {
-              this.tm.write(chalk.red("✖ Batch cancelled.\n"));
+              this.ui.write(chalk.red("✖ Batch cancelled.\n"));
               this.commandQueue = [];
               return;
           }
@@ -196,13 +179,13 @@ Your answer: `), (ans) => {
               const toolCall = this.commandQueue.shift()!;
               
               if (!autoApprove) {
-                  this.tm.write(chalk.yellow(`\nNext action: ${toolCall.name}\n`));
+                  this.ui.write(chalk.yellow(`\nNext action: ${toolCall.name}\n`));
               }
 
               const validation = this.guard.validateToolCall(toolCall.name, toolCall.parameters);
               if (!validation.safe) {
                 const errorMsg = `Error: Tool call rejected. ${validation.reason}`;
-                this.tm.write(chalk.red(`\n✖ ${errorMsg}\n`));
+                this.ui.write(chalk.red(`\n✖ ${errorMsg}\n`));
                 this.history.push({ role: "system", content: errorMsg });
                 continue;
               }
@@ -215,12 +198,12 @@ Your answer: `), (ans) => {
                   
                   const confirmed = await this.guard.confirmCommand(prompt);
                   if (!confirmed) {
-                      this.tm.write(chalk.yellow("⚠ Skipped.\n"));
+                      this.ui.write(chalk.yellow("⚠ Skipped.\n"));
                       continue;
                   }
               }
 
-              this.tm.writeStatusBar(chalk.yellow(`Status: Executing ${toolCall.name}...`));
+              this.ui.writeStatusBar(chalk.yellow(`Status: Executing ${toolCall.name}...`));
               try {
                 let result: string;
                 if (tools[toolCall.name]) {
@@ -230,7 +213,7 @@ Your answer: `), (ans) => {
                 }
 
                 if (result.startsWith("PAUSE_FOR_USER:")) {
-                    this.tm.writeStatusBar(chalk.blue("Status: AI awaiting user input..."));
+                    this.ui.writeStatusBar(chalk.blue("Status: AI awaiting user input..."));
                     const question = result.replace("PAUSE_FOR_USER:", "").trim();
                     const answer = await this.askUserPrompt(question);
                     this.history.push({ role: "system", content: `User Answer: ${answer}` });
@@ -239,15 +222,15 @@ Your answer: `), (ans) => {
 
                 const formattedResult = PromptManager.formatToolResult(result);
                 this.history.push({ role: "system", content: formattedResult });
-                this.tm.writeStatusBar(chalk.green(`Status: ${toolCall.name} completed.`));
+                this.ui.writeStatusBar(chalk.green(`Status: ${toolCall.name} completed.`));
 
                 if (toolCall.name === "write_file" || toolCall.name === "patch_file") {
-                  this.tm.writeStatusBar(chalk.cyan("Status: Auto-Verifying Changes..."));
+                  this.ui.writeStatusBar(chalk.cyan("Status: Auto-Verifying Changes..."));
                   const verification = this.runVerification();
                   if (verification.success) {
-                    this.tm.writeStatusBar(chalk.green("Status: Verification Passed."));
+                    this.ui.writeStatusBar(chalk.green("Status: Verification Passed."));
                   } else {
-                    this.tm.writeStatusBar(chalk.red("Status: Verification Failed. Consulting Debugger..."));
+                    this.ui.writeStatusBar(chalk.red("Status: Verification Failed. Consulting Debugger..."));
                     
                     const codeMetrics = calculateCodeMetrics(process.cwd());
                     const metricsReport = `
@@ -261,22 +244,22 @@ ${codeMetrics.fileMetrics.sort((a: any,b: any) => b.lines - a.lines).slice(0, 5)
                     const debuggerAgent = this.agents.getAgent<DebugAgent>("debugger");
                     const analysis = await debuggerAgent.run(verification.output + metricsReport);
                     this.stateManager.writeScratchpad(analysis);
-                    this.tm.write(chalk.magenta.bold("\n🔍 Debugger: ") + analysis + "\n");
+                    this.ui.write(chalk.magenta.bold("\n🔍 Debugger: ") + analysis + "\n");
                     this.history.push({ role: "system", content: `Debugger: ${analysis}` });
                     this.commandQueue = [];
                   }
                 }
               } catch (err: any) {
-                this.tm.writeStatusBar(chalk.red(`Status: Error executing ${toolCall.name}: ${err.message}`));
+                this.ui.writeStatusBar(chalk.red(`Status: Error executing ${toolCall.name}: ${err.message}`));
                 this.history.push({ role: "system", content: `Error: ${err.message}` });
               }
           }
       } else {
-          this.tm.writeStatusBar(chalk.gray("Status: Idle. Awaiting user input."));
+          this.ui.writeStatusBar(chalk.gray("Status: Idle. Awaiting user input."));
           return;
       }
     }
-    this.tm.writeStatusBar(chalk.gray("Status: Idle. Awaiting user input."));
+    this.ui.writeStatusBar(chalk.gray("Status: Idle. Awaiting user input."));
   }
 
   async cleanup() {

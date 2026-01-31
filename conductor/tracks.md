@@ -23,6 +23,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 - [Robust UI Interaction & Output Management](./tracks/ui-interaction/index.md) - Implementing Esc interruption, command indicators, and correct output routing.
 - [Predictive Model Warming](./tracks/model-warming/index.md) - Proactively loading the next logical model to reduce perceived latency.
 - [LSP Integration & Advanced Indexing](./tracks/lsp-indexing/index.md) - Integrating Language Server Protocol for precise code understanding.
+- [Terminal UI Framework Migration](./tracks/blessed-ui/index.md) - Migrating to the 'blessed' library for robust UI management.
 - [Status Bar & Contextual Indicators](./tracks/status-bar/index.md) - Displaying essential information below the command line.
 - [Enhanced Terminal UI](./tracks/enhanced-ui/index.md) - Creating a bounded command line and working area.
 - [Universal Context Discovery](./tracks/universal-discovery/index.md) - Detecting and adopting context from other AI tools and project docs.
