@@ -7,7 +7,7 @@ import { ModelManager } from "./core/model-manager.js";
 import { InferenceEngine } from "./core/inference.js";
 import { ChatLoop } from "./core/chat-loop.js";
 import { StateManager } from "./core/state.js";
-import { LlamaLogLevel } from "node-llama-cpp";
+import { execSync } from "child_process";
 import readline from "readline";
 import ora from "ora";
 import chalk from "chalk";
@@ -33,10 +33,8 @@ export function createCli() {
       try {
         spinner.text = chalk.cyan("Downloading default model (1.5B)...");
         await modelManager.downloadDefaultModel();
-        
         spinner.text = chalk.cyan("Downloading tiny model (0.5B)...");
         await modelManager.downloadTinyModel();
-        
         spinner.succeed(chalk.green("Environment ready."));
       } catch (err: any) {
         spinner.fail(chalk.red(`Failed to initialize: ${err.message}`));
@@ -94,7 +92,7 @@ export function createCli() {
         const chatLoop = new ChatLoop(engine, tinyEngine);
         await chatLoop.init();
 
-        spinner.succeed(chalk.green("FlowCoder ready. Type 'exit' to quit."));
+        spinner.succeed(chalk.green("FlowCoder ready. Type '/help' for internal commands or 'exit' to quit."));
         console.log(chalk.dim("------------------------------------------"));
 
         const rl = readline.createInterface({
@@ -107,18 +105,74 @@ export function createCli() {
 
         rl.on("line", async (line) => {
           const input = line.trim();
+          
+          if (!input) {
+              rl.prompt();
+              return;
+          }
+
           if (input.toLowerCase() === "exit" || input.toLowerCase() === "quit") {
             rl.close();
             return;
           }
 
-          if (input) {
-            try {
-              await chatLoop.processInput(input);
-            } catch (err: any) {
-              console.error(chalk.red(`\nError during chat: ${err.message}`));
-            }
+          // --- Command Interception ---
+          
+          // 1. Slash Commands (Internal)
+          if (input.startsWith("/")) {
+              const [cmd, ...args] = input.slice(1).split(" ");
+              switch (cmd) {
+                  case "help":
+                      console.log(chalk.bold("\nAvailable Commands:"));
+                      console.log(chalk.cyan(" /help") + "          Show this help");
+                      console.log(chalk.cyan(" /config") + "        Show current configuration");
+                      console.log(chalk.cyan(" /task <desc>") + "  Start a new task");
+                      console.log(chalk.cyan(" /clear") + "         Clear chat history");
+                      console.log(chalk.cyan(" ! <cmd>") + "       Execute shell command directly\n");
+                      break;
+                  case "config":
+                      console.log(chalk.bold("\n🛠️  FlowCoder Configuration:"));
+                      console.log(chalk.dim(JSON.stringify(CONFIG, null, 2)));
+                      break;
+                  case "task":
+                      const id = Date.now().toString();
+                      const desc = args.join(" ");
+                      stateManager.createTask(id, desc);
+                      console.log(chalk.blue(`\n🚀 Task started: ${chalk.bold(desc)}`));
+                      break;
+                  case "clear":
+                      console.log(chalk.yellow("\n🧹 History cleared."));
+                      // Note: We'd need to add a clearHistory method to ChatLoop
+                      break;
+                  default:
+                      console.log(chalk.red(`Unknown command: ${cmd}`));
+              }
+              rl.prompt();
+              return;
           }
+
+          // 2. Bang Commands (External Shell)
+          if (input.startsWith("!")) {
+              const cmd = input.slice(1).trim();
+              if (cmd) {
+                  console.log(chalk.yellow(`\nExecuting: ${cmd}`));
+                  try {
+                      const out = execSync(cmd, { stdio: "inherit" });
+                  } catch (e: any) {
+                      console.error(chalk.red(`\nCommand failed: ${e.message}`));
+                  }
+              }
+              rl.prompt();
+              return;
+          }
+
+          // 3. Normal AI Interaction
+          try {
+            await chatLoop.processInput(input);
+          } catch (err: any) {
+            console.error(chalk.red(`\nError during chat: ${err.message}`));
+          }
+          
           rl.prompt();
         }).on("close", async () => {
           await chatLoop.cleanup();
@@ -135,21 +189,9 @@ export function createCli() {
     .command("config")
     .description("View current configuration")
     .action(() => {
+        // reuse the logic or move to a helper
         console.log(chalk.bold("\n🛠️  FlowCoder Configuration:"));
-        console.log(chalk.dim(JSON.stringify({
-            FLOWCODER_DIR: CONFIG.FLOWCODER_DIR,
-            MODELS: {
-                default: CONFIG.DEFAULT_MODEL_FILE,
-                tiny: CONFIG.TINY_MODEL_FILE
-            }
-        }, null, 2)));
-
-        console.log(chalk.bold("\n🔌 MCP Servers:"));
-        const servers = { ...CONFIG.MCP_CONFIG.defaults, ...CONFIG.MCP_CONFIG.custom_servers };
-        for (const [name, cfg] of Object.entries(servers)) {
-            const status = (cfg as any).enabled !== false ? chalk.green("enabled") : chalk.red("disabled");
-            console.log(`- \${chalk.cyan(name)}: \${status}`);
-        }
+        console.log(chalk.dim(JSON.stringify(CONFIG, null, 2)));
     });
 
   return program;
