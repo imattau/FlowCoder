@@ -115,11 +115,16 @@ export function createCli() {
         if (process.stdin.isTTY) {
             process.stdin.setRawMode(true);
             process.stdin.on('data', (key) => {
+                // Intercept keypresses for readline proxy
+                // tm.handleKey(key); // Assuming TerminalManager can process keys for proxy
+                
+                // Ctrl+C also exits
                 if (key.toString() === '\x03') { // Ctrl+C
                     tm.showCursor();
                     tm.write(chalk.cyan("\n👋 Happy coding!\n"));
                     process.exit(0);
                 }
+                // Esc key
                 if (key.toString() === '\x1b') { // Esc
                     if (aiTurnInProgress) {
                         chatLoop.isInterrupted = true;

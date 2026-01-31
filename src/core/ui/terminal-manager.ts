@@ -10,12 +10,13 @@ export class TerminalManager {
     private scrollOffset: number = 0;
     private maxOutputRows: number = 0;
     private isRendering: boolean = false;
-    private promptHeight: number = 1; 
+    private promptBaseHeight: number = 1; 
     private statusBarHeight: number = 1;
-    private commandLineHeight: number = 3; // Input line + top/bottom border
+    private commandLineBaseHeight: number = 3; // Input line + top/bottom border
     private readlineInputBuffer: string = ""; // Buffer for readline current line
     private readlineCursorPos: number = 0; // Cursor position within readline's line
     private currentPrompt: string = ""; // Store current prompt for redraws
+    private currentInputLines: number = 1; // Tracks how many lines readline input currently occupies
 
     private constructor(stream: NodeJS.WriteStream) {
         this.stream = stream;
@@ -40,7 +41,8 @@ export class TerminalManager {
     get columns(): number { return this._columns; }
 
     get promptRow(): number {
-        return this.rows - this.statusBarHeight - this.commandLineHeight + 2; // Input line within the box
+        // Prompt starts at current total height minus status bar and actual command line height
+        return this.rows - this.statusBarHeight - this.commandLineBaseHeight + (this.currentInputLines > 1 ? (this.currentInputLines -1) : 0);
     }
 
     get statusBarRow(): number {
@@ -48,7 +50,8 @@ export class TerminalManager {
     }
 
     private updateLayoutMetrics() {
-        this.maxOutputRows = this.rows - this.promptHeight - this.statusBarHeight; 
+        // Max output rows = Total rows - (dynamic input lines + status bar)
+        this.maxOutputRows = this.rows - this.currentInputLines - this.statusBarHeight;
     }
 
     clearScreen() {
@@ -96,20 +99,26 @@ export class TerminalManager {
             }
         }
         
-        // Draw command line box
-        const boxTopRow = this.rows - this.statusBarHeight - this.commandLineHeight + 1;
+        // Draw command line box (adjust position based on currentInputLines)
+        const boxTopRow = this.promptRow - 1; // Top border is one line above prompt
+        const boxBottomRow = this.promptRow + this.currentInputLines; // Bottom border is after all input lines
         
+        // Clear and draw top border
         this.moveCursor(1, boxTopRow);
         readline.clearLine(this.stream, 0);
         this.stream.write('┌' + '─'.repeat(this.columns - 2) + '┐');
         
-        this.moveCursor(1, boxTopRow + 1); // Input line
-        readline.clearLine(this.stream, 0);
-        this.stream.write('│');
-        this.moveCursor(this.columns, boxTopRow + 1);
-        this.stream.write('│');
+        // Clear and draw input lines and side borders
+        for(let i = 0; i < this.currentInputLines; i++) {
+            this.moveCursor(1, this.promptRow + i);
+            readline.clearLine(this.stream, 0);
+            this.stream.write('│');
+            this.moveCursor(this.columns, this.promptRow + i);
+            this.stream.write('│');
+        }
 
-        this.moveCursor(1, boxTopRow + 2); // Bottom border of command line
+        // Clear and draw bottom border
+        this.moveCursor(1, boxBottomRow);
         readline.clearLine(this.stream, 0);
         this.stream.write('└' + '─'.repeat(this.columns - 2) + '┘');
         
@@ -133,12 +142,12 @@ export class TerminalManager {
         return new Writable({
             write: (chunk: Buffer, encoding: string, callback: () => void) => {
                 const data = chunk.toString();
-                // We need to intercept cursor movements and line clearings from readline
                 // This is a simplified approach, a full solution needs ANSI parsing
-                if (data.includes('\x1b[K')) { // Clear line from cursor to end
-                    this.moveCursor(2, this.promptRow);
-                    readline.clearLine(this.stream, 0);
-                    this.stream.write(this.currentPrompt + this.readlineInputBuffer); // Redraw prompt and buffer
+                // Intercept cursor movements and line clearings from readline
+                if (data.includes('\x1b[K') || data.includes('\x1b[2K')) { // Clear line from cursor to end, or entire line
+                    this.readlineInputBuffer = "";
+                    this.readlineCursorPos = 0;
+                    this.drawPrompt(this.currentPrompt);
                 } else if (data.includes('\x1b[C')) { // Cursor forward
                     this.readlineCursorPos++;
                 } else if (data.includes('\x1b[D')) { // Cursor backward
@@ -146,7 +155,8 @@ export class TerminalManager {
                 } else {
                     // Assume it's new input or a prompt redraw from readline
                     this.readlineInputBuffer = data.replace(/\x1b\[(\d+;\d+)H/, '').replace(this.currentPrompt, ''); // Strip cursor moves and current prompt
-                    this.drawPrompt(this.currentPrompt); // Redraw with updated buffer
+                    this.readlineCursorPos = this.readlineInputBuffer.length; // Assume cursor is at end
+                    this.drawPrompt(this.currentPrompt);
                 }
                 callback();
             }

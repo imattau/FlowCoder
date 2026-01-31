@@ -131,8 +131,6 @@ Your answer: `), (ans) => {
       turnCount++;
       
       this.tm.writeStatusBar(chalk.gray("Status: Analyzing intent..."));
-      // PREDICTIVE WARMING: Warm ContextAgent (tiny) 
-      this.tinyEngine.loadInBackground(); 
       const intentAgent = this.agents.getAgent<IntentAgent>("intent");
       const intent = await intentAgent.run(input);
       this.tm.write(chalk.dim(`Intent: ${intent}
@@ -140,8 +138,6 @@ Your answer: `), (ans) => {
       if (this.isInterrupted) throw new Error("User interrupted.");
 
       this.tm.writeStatusBar(chalk.gray("Status: Gathering context..."));
-      // PREDICTIVE WARMING: Warm Dispatcher (default)
-      this.defaultEngine.loadInBackground();
       const contextAgent = this.agents.getAgent<ContextAgent>("context");
       const contextResults = await contextAgent.run(input, intent);
       if (this.isInterrupted) throw new Error("User interrupted.");
@@ -159,13 +155,7 @@ Your answer: `), (ans) => {
       if (this.isInterrupted) throw new Error("User interrupted.");
 
       this.stateManager.writeScratchpad(dispatchResponse);
-      // STRATEGIC UNLOAD: Dispatcher phase is done, free memory *unless* it's needed for Coder
-      if (
-          !dispatchResponse.includes("BoilerplateAgent") && // Builder uses default engine
-          !dispatchResponse.includes("RefactorAgent") // Refactor uses default engine
-      ) {
-        await this.defaultEngine.unload();
-      }
+      await this.defaultEngine.unload();
       if (this.isInterrupted) throw new Error("User interrupted.");
 
       let finalTurnResponse = dispatchResponse;
@@ -253,8 +243,6 @@ Your answer: `), (ans) => {
 
                 if (toolCall.name === "write_file" || toolCall.name === "patch_file") {
                   this.tm.writeStatusBar(chalk.cyan("Status: Auto-Verifying Changes..."));
-                  // PREDICTIVE WARMING: Warm Debugger (tiny) if build might fail
-                  this.tinyEngine.loadInBackground();
                   const verification = this.runVerification();
                   if (verification.success) {
                     this.tm.writeStatusBar(chalk.green("Status: Verification Passed."));
