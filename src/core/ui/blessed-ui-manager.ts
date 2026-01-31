@@ -13,7 +13,8 @@ export class BlessedUIManager {
       smartCSR: true,
       title: "FlowCoder",
       sendFocus: true,
-      dockBorders: true
+      dockBorders: true,
+      mouse: false // Disable mouse support to avoid tracking sequences in input
     });
 
     this.outputBox = blessed.log({
@@ -47,7 +48,7 @@ export class BlessedUIManager {
       height: 3,
       inputOnFocus: true,
       keys: true,
-      mouse: true,
+      mouse: false, // Explicitly disable mouse for input
       style: {
         fg: "white",
         bg: "black",
