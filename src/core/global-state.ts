@@ -36,4 +36,22 @@ cached_at: \${new Date().toISOString()}
   listGlobalReferences(): string[] {
     return readdirSync(this.globalRefsDir).map(f => f.replace(".md", ""));
   }
+
+  getAuditReport(dependencies: string[]): { found: string[], missing: string[] } {
+      const cached = this.listGlobalReferences();
+      const found: string[] = [];
+      const missing: string[] = [];
+
+      for (const dep of dependencies) {
+          const safeName = dep.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+          if (cached.includes(safeName)) {
+              found.push(dep);
+          } else {
+              // Only report core libraries, ignore likely local/tiny ones
+              if (dep.length > 3) missing.push(dep);
+          }
+      }
+
+      return { found, missing };
+  }
 }

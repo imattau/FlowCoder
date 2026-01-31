@@ -53,3 +53,33 @@ export function findExternalContext(cwd: string): ExternalContext[] {
 
     return results;
 }
+
+export function scanDependencies(cwd: string): string[] {
+    const deps: string[] = [];
+
+    // 1. Node.js
+    const pkgPath = join(cwd, "package.json");
+    if (existsSync(pkgPath)) {
+        try {
+            const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+            if (pkg.dependencies) deps.push(...Object.keys(pkg.dependencies));
+            if (pkg.devDependencies) deps.push(...Object.keys(pkg.devDependencies));
+        } catch (e) {}
+    }
+
+    // 2. Rust
+    const cargoPath = join(cwd, "Cargo.toml");
+    if (existsSync(cargoPath)) {
+        const content = readFileSync(cargoPath, "utf-8");
+        const matches = content.match(/^\[dependencies\]\n([\s\S]*?)\n(\[|$)/m);
+        if (matches && matches[1]) {
+            const lines = matches[1].split("\n");
+            for (const line of lines) {
+                const name = line.split("=")[0]?.trim();
+                if (name) deps.push(name);
+            }
+        }
+    }
+
+    return Array.from(new Set(deps)); // Unique only
+}

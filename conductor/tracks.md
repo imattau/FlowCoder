@@ -20,6 +20,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 - [Decomposed Planner Pipeline](./tracks/decomposed-planner/index.md) - Splitting the planner into intent, context, and dispatcher agents.
 - [Project Resumption](./tracks/project-resumption/index.md) - Automatic grounding in existing project state and goals on startup.
 - [Universal Context Discovery](./tracks/universal-discovery/index.md) - Detecting and adopting context from other AI tools and project docs.
+- [Automated Reference Grounding](./tracks/ref-grounding/index.md) - Proactive dependency scanning and documentation auditing.
 - [Model Lifecycle Management](./tracks/model-lifecycle/index.md) - Dynamic loading and unloading of models to save resources.
 
 

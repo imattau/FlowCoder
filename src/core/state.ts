@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { CONFIG } from "../config.js";
-import { findExternalContext } from "./discovery.js";
+import { findExternalContext, scanDependencies } from "./discovery.js";
+import { GlobalStateManager } from "./global-state.js";
 
 export interface ProjectState {
   name: string;
@@ -20,15 +21,17 @@ export interface TaskState {
 export class StateManager {
   private dotFolder: string;
   private cwd: string;
+  private globalState: GlobalStateManager;
 
   constructor(cwd: string = process.cwd()) {
     this.cwd = cwd;
     this.dotFolder = join(cwd, ".flowcoder");
+    this.globalState = new GlobalStateManager();
     this.ensureStructure();
   }
 
   private ensureStructure() {
-    if (!existsSync(this.dotFolder)) return; // Don't force create on discovery
+    if (!existsSync(this.dotFolder)) return; 
     const tasksDir = join(this.dotFolder, "tasks");
     if (!existsSync(tasksDir)) mkdirSync(tasksDir);
     const contextDir = join(this.dotFolder, "context");
@@ -38,7 +41,6 @@ export class StateManager {
   getProjectSummary(): string {
     let summary = "PROJECT CONTEXT:\n";
     
-    // 1. FlowCoder Internal State
     const project = this.getProject();
     if (project) {
         summary += `- Name: ${project.name}\n`;
@@ -46,13 +48,24 @@ export class StateManager {
         summary += `- Conventions: ${project.conventions.join(", ")}\n`;
     }
 
-    // 2. External Context Discovery (Cursor, Claude, README)
     const external = findExternalContext(this.cwd);
     if (external.length > 0) {
         summary += "\nDISCOVERED EXTERNAL CONTEXT:\n";
         for (const ctx of external) {
             summary += `### From ${ctx.source}:\n${ctx.content}\n`;
+            // AUTO-INDEX: Add to local references if not already there
+            this.addReference(`External context found in ${ctx.source}`);
         }
+    }
+
+    // GROUNDING AUDIT
+    const deps = scanDependencies(this.cwd);
+    if (deps.length > 0) {
+        const audit = this.globalState.getAuditReport(deps);
+        summary += `\nGROUNDING AUDIT:\n`;
+        summary += `- Cached APIs: ${audit.found.join(", ") || "None"}\n`;
+        summary += `- Missing APIs: ${audit.missing.slice(0, 10).join(", ") || "None"}\n`;
+        summary += `(Instruction: If an API is missing and critical, use fetch_url or inspect_library to ground yourself.)\n`;
     }
 
     const activeTask = this.getLatestTask();
@@ -135,6 +148,12 @@ export class StateManager {
   addReference(ref: string) {
     if (!existsSync(this.dotFolder)) mkdirSync(this.dotFolder, { recursive: true });
     const path = join(this.dotFolder, "references.md");
-    appendFileSync(path, `- ${ref}\n`);
+    
+    // Simple deduplication
+    let current = "";
+    if (existsSync(path)) current = readFileSync(path, "utf-8");
+    if (!current.includes(ref)) {
+        appendFileSync(path, `- ${ref}\n`);
+    }
   }
 }
