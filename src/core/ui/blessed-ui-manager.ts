@@ -15,7 +15,8 @@ export class BlessedUIManager {
       title: "FlowCoder",
       fullUnicode: true,
       dockBorders: true,
-      autoNextFocus: true
+      autoNextFocus: true,
+      terminal: 'xterm-256color' // Target standard color support
     });
 
     this.outputBox = blessed.log({
@@ -42,7 +43,7 @@ export class BlessedUIManager {
       valign: "bottom"
     } as any);
 
-    // Bounded input area (the container)
+    // Bounded input area
     this.inputContainer = (blessed as any).box({
         parent: this.screen,
         bottom: 1,
@@ -78,12 +79,19 @@ export class BlessedUIManager {
       keys: true,
       mouse: false,
       inputOnFocus: true,
+      // Ensure the cursor is visible in GNOME Terminal
+      cursor: {
+          artificial: true,
+          shape: 'block',
+          blink: true,
+          color: 'white'
+      },
       style: {
         fg: "white", 
-        bg: "blue", // Use BLUE background to ensure we can see the box
+        bg: "black",
         focus: {
             fg: "white",
-            bg: "blue"
+            bg: "black"
         }
       }
     });
@@ -147,7 +155,7 @@ export class BlessedUIManager {
     this.inputTextBox.width = `100%-\${cleanPrompt.length + 2}`;
     
     this.inputTextBox.focus();
-    this.inputTextBox.readInput(); // Activate the actual input loop
+    this.inputTextBox.readInput(); 
     this.screen.render();
   }
 
