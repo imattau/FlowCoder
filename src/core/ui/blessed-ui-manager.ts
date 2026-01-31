@@ -42,7 +42,6 @@ export class BlessedUIManager {
       valign: "bottom"
     } as any);
 
-    // Bounded input area (the container)
     this.inputContainer = (blessed as any).box({
         parent: this.screen,
         bottom: 1,
@@ -72,10 +71,11 @@ export class BlessedUIManager {
       mouse: false,
       inputOnFocus: true,
       style: {
-        fg: "white", // Ensure text is visible
-        bg: "black",
+        fg: "white", // Force white foreground
+        bg: "black", // Force black background
         focus: {
-            fg: "white"
+            fg: "white",
+            bg: "black"
         }
       }
     });
@@ -94,9 +94,9 @@ export class BlessedUIManager {
       content: "Initializing..."
     });
 
-    // Detect keypresses to change prompt color
-    this.inputTextBox.on("keypress", (ch: string, key: any) => {
-        const value = this.inputTextBox.value + (ch || "");
+    // Color feedback
+    this.inputTextBox.on("keypress", () => {
+        const value = this.inputTextBox.value;
         if (value.startsWith("/")) {
             this.promptLabel.style.fg = "cyan";
         } else if (value.startsWith("!")) {
@@ -107,7 +107,6 @@ export class BlessedUIManager {
         this.screen.render();
     });
 
-    // Handle Resize
     this.screen.on("resize", () => {
         this.screen.render();
     });
@@ -139,24 +138,27 @@ export class BlessedUIManager {
     this.inputTextBox.left = cleanPrompt.length;
     this.inputTextBox.width = `100%-\${cleanPrompt.length + 2}`;
     
-    // Reset color to default
     this.promptLabel.style.fg = "magenta";
     
+    this.inputTextBox.readInput();
     this.inputTextBox.focus();
     this.screen.render();
   }
 
   async getInputPrompt(promptText: string): Promise<string> {
     const oldPrompt = this.promptLabel.content;
-    const oldLeft = this.inputTextBox.left;
-
-    this.drawPrompt(promptText);
     
+    this.promptLabel.setContent(promptText);
+    const cleanPrompt = promptText.replace(/\x1b\[[0-9;]*m/g, "");
+    this.inputTextBox.left = cleanPrompt.length;
+    
+    this.screen.render();
+    this.inputTextBox.focus();
+
     return new Promise((resolve) => {
         this.inputTextBox.readInput((err, value) => {
             this.inputTextBox.clearValue();
             this.drawPrompt(oldPrompt);
-            this.inputTextBox.left = oldLeft;
             resolve(value || "");
         });
     });
