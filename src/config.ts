@@ -34,6 +34,11 @@ export const CONFIG = {
         enabled: false, // Disabling due to 404, we have internal fetch_url
         command: "npx",
         args: ["-y", "@modelcontextprotocol/server-fetch"]
+      },
+      "typescript-lsp": {
+        enabled: true,
+        command: "typescript-language-server",
+        args: ["--stdio"]
       }
     },
     custom_servers: {} as Record<string, { command: string, args: string[], env?: Record<string, string> }>

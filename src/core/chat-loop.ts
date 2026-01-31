@@ -246,7 +246,7 @@ export class ChatLoop {
                     verifySpinner.fail(chalk.red("Fail."));
                     
                     const codeMetrics = calculateCodeMetrics(process.cwd());
-                    const metricsReport = `\n--- Code Metrics Report ---\nTotal Lines: ${codeMetrics.totalLines}\nLargest Files (lines):\n${codeMetrics.fileMetrics.sort((a,b) => b.lines - a.lines).slice(0, 5).map(m => `  - ${m.file}: ${m.lines}`).join('\n')}\n--- End Report ---\n`;
+                    const metricsReport = `\n--- Code Metrics Report ---\nTotal Lines: ${codeMetrics.totalLines}\nLargest Files (lines):\n${codeMetrics.fileMetrics.sort((a: any,b: any) => b.lines - a.lines).slice(0, 5).map((m: any) => `  - ${m.file}: ${m.lines}`).join('\n')}\n--- End Report ---\n`;
                     
                     const debuggerAgent = this.agents.getAgent<DebugAgent>("debugger");
                     const analysis = await debuggerAgent.run(verification.output + metricsReport);

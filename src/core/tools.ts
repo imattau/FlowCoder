@@ -71,7 +71,6 @@ export const tools: Record<string, Tool> = {
         
         const newContent = content.replace(args.search, args.replace);
         
-        // Show Diff
         const patch = diff.createPatch(args.path, content, newContent);
         console.log("\n--- DIFF ---");
         patch.split("\n").forEach((line: string) => {
@@ -150,7 +149,8 @@ export const tools: Record<string, Tool> = {
         if (!existsSync(searchPath)) return `Error: Library '${args.name}' not found in node_modules.`;
         
         const output = execSync(`find ${searchPath} -name "*.d.ts" | head -n 10`, { encoding: "utf-8" });
-        return `Found the following type definitions for ${args.name}:\n${output}\nYou can now use read_file on these paths to see the API contract.`;
+        return `Found the following type definitions for ${args.name}:
+${output}You can now use read_file on these paths to see the API contract.`;
       } catch (err: any) {
         return `Error inspecting library: ${err.message}`;
       }
@@ -168,7 +168,9 @@ export const tools: Record<string, Tool> = {
         const output = execSync(args.command, { encoding: "utf-8" });
         return output || "(Command executed successfully with no output)";
       } catch (err: any) {
-        return `Error executing command: ${err.message}\nStdout: ${err.stdout}\nStderr: ${err.stderr}`;
+        return `Error executing command: ${err.message}
+Stdout: ${err.stdout}
+Stderr: ${err.stderr}`;
       }
     }
   },
@@ -287,9 +289,9 @@ export const tools: Record<string, Tool> = {
       try {
         const status = execSync("git status -s", { encoding: "utf-8" });
         const diff = execSync("git diff HEAD --stat", { encoding: "utf-8" });
-        return `Status:\n\${status || "Clean"}\n\nDiff Summary:\n\${diff || "No changes"}`;
+        return `Status:\n${status || "Clean"}\n\nDiff Summary:\n${diff || "No changes"}`;
       } catch (err: any) {
-        return `Error getting git context: \${err.message}`;
+        return `Error getting git context: ${err.message}`;
       }
     }
   },
@@ -309,16 +311,16 @@ export const tools: Record<string, Tool> = {
           return "All changes staged.";
         } else if (args.action === "commit") {
           if (!args.message) return "Error: Commit message required.";
-          execSync(`git commit -m "\${args.message}"`);
-          return `Committed changes with message: \${args.message}`;
+          execSync(`git commit -m "${args.message}"`);
+          return `Committed changes with message: ${args.message}`;
         } else if (args.action === "branch") {
           if (!args.name) return "Error: Branch name required.";
-          execSync(`git checkout -b \${args.name}`);
-          return `Created and switched to branch: \${args.name}`;
+          execSync(`git checkout -b ${args.name}`);
+          return `Created and switched to branch: ${args.name}`;
         }
         return "Unknown git action.";
       } catch (err: any) {
-        return `Git Error: \${err.message}`;
+        return `Git Error: ${err.message}`;
       }
     }
   },
@@ -338,15 +340,15 @@ export const tools: Record<string, Tool> = {
         
         let cmd = "";
         if (args.action === "install") {
-          cmd = `npm install \${args.package} \${args.dev ? "--save-dev" : ""}`;
+          cmd = `npm install ${args.package} ${args.dev ? "--save-dev" : ""}`;
         } else {
-          cmd = `npm uninstall \${args.package}`;
+          cmd = `npm uninstall ${args.package}`;
         }
         
         execSync(cmd);
-        return `Successfully \${args.action === "install" ? "installed" : "removed"} \${args.package}`;
+        return `Successfully ${args.action === "install" ? "installed" : "removed"} ${args.package}`;
       } catch (err: any) {
-        return `Package Manager Error: \${err.message}`;
+        return `Package Manager Error: ${err.message}`;
       }
     }
   },
@@ -358,9 +360,7 @@ export const tools: Record<string, Tool> = {
       question: { type: "string", description: "The question to ask the user." }
     },
     execute: async (args: { question: string }) => {
-      // In our current REPL architecture, the ChatLoop handles the output
-      // This tool simply returns the question as a marker
-      return `PAUSE_FOR_USER: \${args.question}`;
+      return `PAUSE_FOR_USER: ${args.question}`;
     }
   },
 
@@ -373,7 +373,7 @@ export const tools: Record<string, Tool> = {
         const output = execSync("find . -maxdepth 3 -not -path '*/.*' -not -path './node_modules*'", { encoding: "utf-8" });
         return output || "Empty project.";
       } catch (err: any) {
-        return `Error generating tree: \${err.message}`;
+        return `Error generating tree: ${err.message}`;
       }
     }
   }
