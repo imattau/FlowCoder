@@ -150,7 +150,7 @@ export function createCli() {
                       tm.write(`\n${chalk.bold("Available Commands:")}`);
                       tm.write(`\n${chalk.cyan(" /help")}          Show this help`);
                       tm.write(`\n${chalk.cyan(" /config")}        Show current configuration`);
-                      tm.write(`\n${chalk.cyan(" /init [name]")}   Initialize .flowcoder setup for the current project`);
+                      tm.write(`\n${chalk.cyan(" /init [name]")})   Initialize .flowcoder setup for the current project`);
                       tm.write(`\n${chalk.cyan(" /task <desc>")})  Start a new task`);
                       tm.write(`\n${chalk.cyan(" /clear")}         Clear chat history`);
                       tm.write(`\n${chalk.cyan(" /exit")}          Exit FlowCoder`);
