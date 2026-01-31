@@ -21,6 +21,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 - [Project Resumption](./tracks/project-resumption/index.md) - Automatic grounding in existing project state and goals on startup.
 - [Modular & OO Code Generation](./tracks/modular-oo/index.md) - Prioritizing modular and object-oriented code from the outset.
 - [Robust UI Interaction & Output Management](./tracks/ui-interaction/index.md) - Implementing Esc interruption, command indicators, and correct output routing.
+- [Predictive Model Warming](./tracks/model-warming/index.md) - Proactively loading the next logical model to reduce perceived latency.
 - [LSP Integration & Advanced Indexing](./tracks/lsp-indexing/index.md) - Integrating Language Server Protocol for precise code understanding.
 - [Status Bar & Contextual Indicators](./tracks/status-bar/index.md) - Displaying essential information below the command line.
 - [Enhanced Terminal UI](./tracks/enhanced-ui/index.md) - Creating a bounded command line and working area.

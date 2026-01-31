@@ -90,7 +90,7 @@ ${idx + 1}. ${chalk.cyan(cmd.name)}(${chalk.dim(JSON.stringify(cmd.parameters))}
 
       const rl = readline.createInterface({
           input: process.stdin,
-          output: process.stderr
+          output: process.stderr // Use process.stderr for readline input to avoid conflict with TM
       });
 
       return new Promise((res) => {
@@ -122,7 +122,7 @@ Your answer: `), (ans) => {
 
   async processInput(input: string): Promise<void> {
     this.history.push({ role: "user", content: input });
-    this.isInterrupted = false; // Reset interruption flag for new turn
+    this.isInterrupted = false;
     
     let turnCount = 0;
     const maxTurns = 15;
@@ -131,6 +131,8 @@ Your answer: `), (ans) => {
       turnCount++;
       
       this.tm.writeStatusBar(chalk.gray("Status: Analyzing intent..."));
+      // PREDICTIVE WARMING: Warm ContextAgent (tiny) 
+      this.tinyEngine.loadInBackground(); 
       const intentAgent = this.agents.getAgent<IntentAgent>("intent");
       const intent = await intentAgent.run(input);
       this.tm.write(chalk.dim(`Intent: ${intent}
@@ -138,6 +140,8 @@ Your answer: `), (ans) => {
       if (this.isInterrupted) throw new Error("User interrupted.");
 
       this.tm.writeStatusBar(chalk.gray("Status: Gathering context..."));
+      // PREDICTIVE WARMING: Warm Dispatcher (default)
+      this.defaultEngine.loadInBackground();
       const contextAgent = this.agents.getAgent<ContextAgent>("context");
       const contextResults = await contextAgent.run(input, intent);
       if (this.isInterrupted) throw new Error("User interrupted.");
@@ -155,7 +159,13 @@ Your answer: `), (ans) => {
       if (this.isInterrupted) throw new Error("User interrupted.");
 
       this.stateManager.writeScratchpad(dispatchResponse);
-      await this.defaultEngine.unload();
+      // STRATEGIC UNLOAD: Dispatcher phase is done, free memory *unless* it's needed for Coder
+      if (
+          !dispatchResponse.includes("BoilerplateAgent") && // Builder uses default engine
+          !dispatchResponse.includes("RefactorAgent") // Refactor uses default engine
+      ) {
+        await this.defaultEngine.unload();
+      }
       if (this.isInterrupted) throw new Error("User interrupted.");
 
       let finalTurnResponse = dispatchResponse;
@@ -220,7 +230,7 @@ Your answer: `), (ans) => {
                   }
               }
 
-              this.tm.writeStatusBar(chalk.yellow(`Status: Executing tool ${toolCall.name}...`));
+              this.tm.writeStatusBar(chalk.yellow(`Status: Executing ${toolCall.name}...`));
               try {
                 let result: string;
                 if (tools[toolCall.name]) {
@@ -239,10 +249,12 @@ Your answer: `), (ans) => {
 
                 const formattedResult = PromptManager.formatToolResult(result);
                 this.history.push({ role: "system", content: formattedResult });
-                this.tm.writeStatusBar(chalk.green(`Status: Tool ${toolCall.name} completed.`));
+                this.tm.writeStatusBar(chalk.green(`Status: ${toolCall.name} completed.`));
 
                 if (toolCall.name === "write_file" || toolCall.name === "patch_file") {
                   this.tm.writeStatusBar(chalk.cyan("Status: Auto-Verifying Changes..."));
+                  // PREDICTIVE WARMING: Warm Debugger (tiny) if build might fail
+                  this.tinyEngine.loadInBackground();
                   const verification = this.runVerification();
                   if (verification.success) {
                     this.tm.writeStatusBar(chalk.green("Status: Verification Passed."));
@@ -267,7 +279,7 @@ ${codeMetrics.fileMetrics.sort((a: any,b: any) => b.lines - a.lines).slice(0, 5)
                   }
                 }
               } catch (err: any) {
-                this.tm.writeStatusBar(chalk.red(`Status: Error executing tool ${toolCall.name}.`));
+                this.tm.writeStatusBar(chalk.red(`Status: Error executing ${toolCall.name}: ${err.message}`));
                 this.history.push({ role: "system", content: `Error: ${err.message}` });
               }
           }

@@ -2,11 +2,15 @@ import { getLlama, LlamaChatSession, LlamaLogLevel, type LlamaModel, type LlamaC
 import ora from "ora";
 import chalk from "chalk";
 
+type ModelLoadStatus = "idle" | "loading" | "loaded";
+
 export class InferenceEngine {
   private model: LlamaModel | null = null;
   private context: LlamaContext | null = null;
   private session: LlamaChatSession | null = null;
   private modelPath: string | null = null;
+  private loadPromise: Promise<void> | null = null; // To track ongoing loading
+  private status: ModelLoadStatus = "idle";
   
   private lastInferenceTime: number = 0;
   private lastTokenCount: number = 0;
@@ -15,9 +19,8 @@ export class InferenceEngine {
     this.modelPath = modelPath;
   }
 
-  private async ensureLoaded() {
-    if (this.session) return;
-    if (!this.modelPath) throw new Error("Model path not set. Call init(modelPath) first.");
+  private async performLoad() {
+    if (!this.modelPath) throw new Error("Model path not set.");
 
     const spinner = ora(chalk.dim(`Loading model: \${this.modelPath.split('/').pop()}...`)).start();
     try {
@@ -32,11 +35,32 @@ export class InferenceEngine {
         this.session = new LlamaChatSession({
           contextSequence: this.context.getSequence(),
         });
+        this.status = "loaded";
         spinner.succeed(chalk.dim(`Model loaded: \${this.modelPath.split('/').pop()}`));
     } catch (err: any) {
+        this.status = "idle"; // Reset status on failure
         spinner.fail(chalk.red(`Failed to load model \${this.modelPath}: \${err.message}`));
         throw err;
+    } finally {
+        this.loadPromise = null;
     }
+  }
+
+  async ensureLoaded() {
+    if (this.status === "loaded") return;
+    if (this.status === "loading" && this.loadPromise) {
+        return this.loadPromise; // Wait for ongoing load
+    }
+    this.status = "loading";
+    this.loadPromise = this.performLoad();
+    return this.loadPromise;
+  }
+
+  async loadInBackground() {
+    if (this.status !== "idle") return; // Already loading or loaded
+    this.status = "loading";
+    this.loadPromise = this.performLoad();
+    // Don't await, let it run in background
   }
 
   async generateResponse(prompt: string, onToken?: (token: string) => void): Promise<string> {
@@ -66,26 +90,16 @@ export class InferenceEngine {
   }
 
   async unload() {
-      if (this.session) {
-          // In node-llama-cpp, references need to be cleared for GC
+      if (this.status === "loaded") {
           this.session = null;
           this.context = null;
           this.model = null;
+          this.status = "idle";
           console.log(chalk.dim(`Model unloaded from memory.`));
       }
   }
 
-  getMetrics() {
-    const seconds = this.lastInferenceTime / 1000;
-    const tps = seconds > 0 ? this.lastTokenCount / seconds : 0;
-    return {
-      tokensPerSecond: tps,
-      durationMs: this.lastInferenceTime,
-      tokenCount: this.lastTokenCount
-    };
-  }
-
-  isInitialized(): boolean {
-    return this.modelPath !== null;
+  isLoaded(): boolean {
+    return this.status === "loaded";
   }
 }
