@@ -8,6 +8,7 @@ import { IntentAgent, ContextAgent, DispatcherAgent, DebugAgent } from "./agents
 import { McpHost } from "./mcp/host.js";
 import { execSync } from "child_process";
 import { discoverProjectCommands, type ProjectCommands } from "./discovery.js";
+import { TerminalManager } from "./ui/terminal-manager.js";
 import ora from "ora";
 import chalk from "chalk";
 import readline from "readline";
@@ -20,6 +21,7 @@ export class ChatLoop {
   private commands: ProjectCommands;
   private mcp: McpHost;
   private commandQueue: { name: string, parameters: any }[] = [];
+  private tm: TerminalManager;
 
   constructor(
     private defaultEngine: InferenceEngine,
@@ -34,15 +36,14 @@ export class ChatLoop {
         "default": defaultEngine,
         "tiny": tinyEngine
     });
+    this.tm = TerminalManager.getInstance();
   }
 
   async init() {
       await this.mcp.init();
-      
-      const summary = this.stateManager.getProjectSummary();
       this.history.push({
           role: "system", 
-          content: `You are resuming work on a project. \${summary}\n\${PromptManager.getSystemPrompt(this.mcp.getTools())}` 
+          content: `You are resuming work on a project. ${this.stateManager.getProjectSummary()}\n${PromptManager.getSystemPrompt(this.mcp.getTools())}` 
       });
   }
 
@@ -69,9 +70,9 @@ export class ChatLoop {
   private async requestQueueApproval(): Promise<"all" | "step" | "abort"> {
       if (this.commandQueue.length === 0) return "abort";
 
-      console.log(chalk.bold.yellow("\n📋 Proposed Command Queue:"));
+      this.tm.write(chalk.bold.yellow("\n📋 Proposed Command Queue:"));
       this.commandQueue.forEach((cmd, idx) => {
-          console.log(`${idx + 1}. ${chalk.cyan(cmd.name)}(${chalk.dim(JSON.stringify(cmd.parameters))})`);
+          this.tm.write(`\n${idx + 1}. ${chalk.cyan(cmd.name)}(${chalk.dim(JSON.stringify(cmd.parameters))})`);
       });
 
       const rl = readline.createInterface({
@@ -85,6 +86,7 @@ export class ChatLoop {
               const a = ans.toLowerCase();
               if (a === "a" || a === "all") res("all");
               else if (a === "s" || a === "step") res("step");
+              else if (a === "c" || a === "cancel") res("abort");
               else res("abort");
           });
       });
@@ -112,13 +114,22 @@ export class ChatLoop {
     while (turnCount < maxTurns) {
       turnCount++;
       
-      const intentSpinner = ora(chalk.dim("Analyzing intent...")).start();
+      const intentSpinner = ora({
+          text: chalk.dim("Analyzing intent..."),
+          discardStdin: false,
+          stream: process.stdout
+      }).start();
+
       const intentAgent = this.agents.getAgent<IntentAgent>("intent");
       const intent = await intentAgent.run(input);
       intentSpinner.stop();
-      console.log(chalk.dim(`Intent: ${intent}`));
+      this.tm.write(chalk.dim(`Intent: ${intent}\n`));
 
-      const contextSpinner = ora(chalk.dim("Gathering context...")).start();
+      const contextSpinner = ora({
+          text: chalk.dim("Gathering context..."),
+          discardStdin: false,
+          stream: process.stdout
+      }).start();
       const contextAgent = this.agents.getAgent<ContextAgent>("context");
       const contextResults = await contextAgent.run(input, intent);
       contextSpinner.stop();
@@ -128,7 +139,11 @@ export class ChatLoop {
           this.history.push({ role: "system", content: PromptManager.formatToolResult(res) });
       }
 
-      const dispatchSpinner = ora(chalk.dim("Planning execution...")).start();
+      const dispatchSpinner = ora({
+          text: chalk.dim("Planning execution..."),
+          discardStdin: false,
+          stream: process.stdout
+      }).start();
       const dispatcher = this.agents.getAgent<DispatcherAgent>("dispatcher");
       const dispatchResponse = await dispatcher.run(input, this.history.map(h => `${h.role}: ${h.content}`));
       dispatchSpinner.stop();
@@ -138,27 +153,33 @@ export class ChatLoop {
 
       let finalTurnResponse = dispatchResponse;
       if (dispatchResponse.includes("PatchAgent")) {
+          const patchSpinner = ora(chalk.cyan("Delegating to PatchAgent (Sniper)...")).start();
           const patcher = this.agents.getAgent<any>("patcher");
           finalTurnResponse = await patcher.run("Context updated in scratchpad.");
+          patchSpinner.stop();
       } else if (dispatchResponse.includes("BoilerplateAgent")) {
+          const buildSpinner = ora(chalk.cyan("Delegating to BoilerplateAgent (Builder)...")).start();
           const builder = this.agents.getAgent<any>("boilerplate");
           finalTurnResponse = await builder.run("Context updated in scratchpad.");
+          buildSpinner.stop();
       } else if (dispatchResponse.includes("TemplateAgent")) {
+          const weaverSpinner = ora(chalk.cyan("Delegating to TemplateAgent (Weaver)...")).start();
           const weaver = this.agents.getAgent<any>("template");
           finalTurnResponse = await weaver.run("Context updated in scratchpad.");
+          weaverSpinner.stop();
       }
 
       this.commandQueue = PromptManager.parseToolCalls(finalTurnResponse);
       const plainText = finalTurnResponse.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "").trim();
       
       if (plainText && !plainText.includes("patch_file")) {
-          console.log(chalk.blue.bold("AI: ") + plainText);
+          this.tm.write(chalk.blue.bold("AI: ") + plainText + "\n");
       }
 
       if (this.commandQueue.length > 0) {
           const mode = await this.requestQueueApproval();
           if (mode === "abort") {
-              console.log(chalk.red("✖ Batch cancelled."));
+              this.tm.write(chalk.red("✖ Batch cancelled.\n"));
               this.commandQueue = [];
               return;
           }
@@ -169,13 +190,13 @@ export class ChatLoop {
               const toolCall = this.commandQueue.shift()!;
               
               if (!autoApprove) {
-                  console.log(chalk.yellow(`\nNext action: ${toolCall.name}`));
+                  this.tm.write(chalk.yellow(`\nNext action: ${toolCall.name}\n`));
               }
 
               const validation = this.guard.validateToolCall(toolCall.name, toolCall.parameters);
               if (!validation.safe) {
                 const errorMsg = `Error: Tool call rejected. ${validation.reason}`;
-                console.log(chalk.red(`\n✖ ${errorMsg}`));
+                this.tm.write(chalk.red(`\n✖ ${errorMsg}\n`));
                 this.history.push({ role: "system", content: errorMsg });
                 continue;
               }
@@ -188,7 +209,7 @@ export class ChatLoop {
                   
                   const confirmed = await this.guard.confirmCommand(prompt);
                   if (!confirmed) {
-                      console.log(chalk.yellow("⚠ Skipped."));
+                      this.tm.write(chalk.yellow("⚠ Skipped.\n"));
                       continue;
                   }
               }
@@ -225,7 +246,7 @@ export class ChatLoop {
                     const debuggerAgent = this.agents.getAgent<DebugAgent>("debugger");
                     const analysis = await debuggerAgent.run(verification.output);
                     this.stateManager.writeScratchpad(analysis);
-                    console.log(chalk.magenta.bold("\n🔍 Debugger: ") + analysis);
+                    this.tm.write(chalk.magenta.bold("\n🔍 Debugger: ") + analysis + "\n");
                     this.history.push({ role: "system", content: `Debugger: ${analysis}` });
                     this.commandQueue = [];
                   }
