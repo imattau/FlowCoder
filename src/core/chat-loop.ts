@@ -88,6 +88,19 @@ export class ChatLoop {
       });
   }
 
+  private async askUserPrompt(question: string): Promise<string> {
+      const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout
+      });
+      return new Promise((res) => {
+          rl.question(chalk.bold.magenta(`\n❓ AI Question: ${question}\nYour answer: `), (ans) => {
+              rl.close();
+              res(ans);
+          });
+      });
+  }
+
   async processInput(input: string): Promise<void> {
     this.history.push({ role: "user", content: input });
     
@@ -97,37 +110,35 @@ export class ChatLoop {
     while (turnCount < maxTurns) {
       turnCount++;
       
-      // 1. INTENT ANALYSIS (Tiny Model)
+      const intentSpinner = ora(chalk.dim("Analyzing intent...")).start();
       const intentAgent = this.agents.getAgent<IntentAgent>("intent");
       const intent = await intentAgent.run(input);
+      intentSpinner.stop();
       console.log(chalk.dim(`Intent: ${intent}`));
 
-      // 2. CONTEXT GATHERING (Tiny Model)
+      const contextSpinner = ora(chalk.dim("Gathering context...")).start();
       const contextAgent = this.agents.getAgent<ContextAgent>("context");
       const contextResults = await contextAgent.run(input, intent);
+      contextSpinner.stop();
       const contextTools = PromptManager.parseToolCalls(contextResults);
       for (const call of contextTools) {
           const res = await (tools[call.name] as any).execute(call.parameters);
           this.history.push({ role: "system", content: PromptManager.formatToolResult(res) });
       }
 
-      // 3. DISPATCH & PLAN (Default/Heavier Model)
+      const dispatchSpinner = ora(chalk.dim("Planning execution...")).start();
       const dispatcher = this.agents.getAgent<DispatcherAgent>("dispatcher");
       const dispatchResponse = await dispatcher.run(input, this.history.map(h => `${h.role}: ${h.content}`));
+      dispatchSpinner.stop();
 
       this.stateManager.writeScratchpad(dispatchResponse);
-
-      // STRATEGIC UNLOAD: Dispatcher phase is done, free memory before execution
       await this.defaultEngine.unload();
 
       let finalTurnResponse = dispatchResponse;
-      
       if (dispatchResponse.includes("PatchAgent")) {
           const patcher = this.agents.getAgent<any>("patcher");
           finalTurnResponse = await patcher.run("Context updated in scratchpad.");
       } else if (dispatchResponse.includes("BoilerplateAgent")) {
-          // If we need BoilerplateAgent (Builder), it might re-load the default engine 
-          // because it's configured to use defaultEng in the factory.
           const builder = this.agents.getAgent<any>("boilerplate");
           finalTurnResponse = await builder.run("Context updated in scratchpad.");
       } else if (dispatchResponse.includes("TemplateAgent")) {
@@ -144,7 +155,6 @@ export class ChatLoop {
 
       if (this.commandQueue.length > 0) {
           const mode = await this.requestQueueApproval();
-          
           if (mode === "abort") {
               console.log(chalk.red("✖ Batch cancelled."));
               this.commandQueue = [];
@@ -168,8 +178,13 @@ export class ChatLoop {
                 continue;
               }
 
-              if (!autoApprove && (toolCall.name === "run_cmd" || toolCall.name === "cache_global_ref" || toolCall.name === "scaffold_project")) {
-                  const confirmed = await this.guard.confirmCommand(toolCall.name);
+              const dangerousTools = ["run_cmd", "cache_global_ref", "scaffold_project", "git_manager", "package_manager"];
+              if (!autoApprove && dangerousTools.includes(toolCall.name)) {
+                  let prompt = `Execute ${toolCall.name}?`;
+                  if (toolCall.name === "git_manager") prompt = `Perform git ${toolCall.parameters.action}?`;
+                  if (toolCall.name === "package_manager") prompt = `${toolCall.parameters.action} package ${toolCall.parameters.package}?`;
+                  
+                  const confirmed = await this.guard.confirmCommand(prompt);
                   if (!confirmed) {
                       console.log(chalk.yellow("⚠ Skipped."));
                       continue;
@@ -184,6 +199,14 @@ export class ChatLoop {
                   result = await (tools[toolCall.name] as any).execute(toolCall.parameters);
                 } else {
                   result = await this.mcp.callTool(toolCall.name, toolCall.parameters);
+                }
+
+                if (result.startsWith("PAUSE_FOR_USER:")) {
+                    toolSpinner.stop();
+                    const question = result.replace("PAUSE_FOR_USER:", "").trim();
+                    const answer = await this.askUserPrompt(question);
+                    this.history.push({ role: "system", content: `User Answer: ${answer}` });
+                    continue;
                 }
 
                 const formattedResult = PromptManager.formatToolResult(result);

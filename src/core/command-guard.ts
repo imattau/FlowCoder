@@ -43,7 +43,7 @@ export class CommandGuard {
       }
     }
 
-    if (name === "cache_global_ref" || name === "scaffold_project") {
+    if (name === "cache_global_ref" || name === "scaffold_project" || name === "git_manager" || name === "package_manager") {
         return { safe: true }; // Will require confirmation in ChatLoop
     }
 

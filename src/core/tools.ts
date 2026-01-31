@@ -287,9 +287,93 @@ export const tools: Record<string, Tool> = {
       try {
         const status = execSync("git status -s", { encoding: "utf-8" });
         const diff = execSync("git diff HEAD --stat", { encoding: "utf-8" });
-        return `Status:\n${status || "Clean"}\n\nDiff Summary:\n${diff || "No changes"}`;
+        return `Status:\n\${status || "Clean"}\n\nDiff Summary:\n\${diff || "No changes"}`;
       } catch (err: any) {
-        return `Error getting git context: ${err.message}`;
+        return `Error getting git context: \${err.message}`;
+      }
+    }
+  },
+
+  git_manager: {
+    name: "git_manager",
+    description: "Perform git operations (stage, commit, branch).",
+    parameters: {
+      action: { type: "string", description: "stage, commit, or branch" },
+      message: { type: "string", description: "Commit message (required for commit)" },
+      name: { type: "string", description: "Branch name (required for branch)" }
+    },
+    execute: (args: { action: "stage" | "commit" | "branch", message?: string, name?: string }) => {
+      try {
+        if (args.action === "stage") {
+          execSync("git add .");
+          return "All changes staged.";
+        } else if (args.action === "commit") {
+          if (!args.message) return "Error: Commit message required.";
+          execSync(`git commit -m "\${args.message}"`);
+          return `Committed changes with message: \${args.message}`;
+        } else if (args.action === "branch") {
+          if (!args.name) return "Error: Branch name required.";
+          execSync(`git checkout -b \${args.name}`);
+          return `Created and switched to branch: \${args.name}`;
+        }
+        return "Unknown git action.";
+      } catch (err: any) {
+        return `Git Error: \${err.message}`;
+      }
+    }
+  },
+
+  package_manager: {
+    name: "package_manager",
+    description: "Install or remove project dependencies.",
+    parameters: {
+      action: { type: "string", description: "install or remove" },
+      package: { type: "string", description: "Name of the package" },
+      dev: { type: "boolean", description: "Whether to install as a devDependency" }
+    },
+    execute: (args: { action: "install" | "remove", package: string, dev?: boolean }) => {
+      try {
+        const isNode = existsSync("package.json");
+        if (!isNode) return "Error: No package.json found. Only Node.js supported for now.";
+        
+        let cmd = "";
+        if (args.action === "install") {
+          cmd = `npm install \${args.package} \${args.dev ? "--save-dev" : ""}`;
+        } else {
+          cmd = `npm uninstall \${args.package}`;
+        }
+        
+        execSync(cmd);
+        return `Successfully \${args.action === "install" ? "installed" : "removed"} \${args.package}`;
+      } catch (err: any) {
+        return `Package Manager Error: \${err.message}`;
+      }
+    }
+  },
+
+  ask_user: {
+    name: "ask_user",
+    description: "Pause execution to ask the user a clarification question.",
+    parameters: {
+      question: { type: "string", description: "The question to ask the user." }
+    },
+    execute: async (args: { question: string }) => {
+      // In our current REPL architecture, the ChatLoop handles the output
+      // This tool simply returns the question as a marker
+      return `PAUSE_FOR_USER: \${args.question}`;
+    }
+  },
+
+  get_project_tree: {
+    name: "get_project_tree",
+    description: "Get a recursive tree view of the project structure.",
+    parameters: {},
+    execute: () => {
+      try {
+        const output = execSync("find . -maxdepth 3 -not -path '*/.*' -not -path './node_modules*'", { encoding: "utf-8" });
+        return output || "Empty project.";
+      } catch (err: any) {
+        return `Error generating tree: \${err.message}`;
       }
     }
   }
