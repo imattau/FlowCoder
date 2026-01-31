@@ -10,6 +10,7 @@ import { execSync } from "child_process";
 import { discoverProjectCommands, type ProjectCommands } from "./discovery.js";
 import ora from "ora";
 import chalk from "chalk";
+import readline from "readline";
 
 export class ChatLoop {
   private history: { role: "user" | "assistant" | "system", content: string }[] = [];
@@ -18,6 +19,7 @@ export class ChatLoop {
   private agents: AgentFactory;
   private commands: ProjectCommands;
   private mcp: McpHost;
+  private commandQueue: { name: string, parameters: any }[] = [];
 
   constructor(
     private defaultEngine: InferenceEngine,
@@ -39,7 +41,6 @@ export class ChatLoop {
 
   async init() {
       await this.mcp.init();
-      // Inject system prompt with discovered tools
       this.history.push({
           role: "system", 
           content: PromptManager.getSystemPrompt(this.mcp.getTools()) 
@@ -51,13 +52,13 @@ export class ChatLoop {
     try {
       combinedOutput += `[LINTING: ${this.commands.lint}]\n`;
       try {
-        combinedOutput += execSync(this.commands.lint, { encoding: "utf-8", stdio: "pipe" });
+        execSync(this.commands.lint, { encoding: "utf-8", stdio: "pipe" });
       } catch (e: any) {
         combinedOutput += `Lint Failed:\n${e.stdout?.toString() || ""}\n${e.stderr?.toString() || ""}\n`;
       }
       
       combinedOutput += `\n[BUILDING: ${this.commands.build}]\n`;
-      combinedOutput += execSync(this.commands.build, { encoding: "utf-8", stdio: "pipe" });
+      execSync(this.commands.build, { encoding: "utf-8", stdio: "pipe" });
       
       return { success: true, output: combinedOutput };
     } catch (err: any) {
@@ -66,14 +67,37 @@ export class ChatLoop {
     }
   }
 
+  private async requestQueueApproval(): Promise<"all" | "step" | "abort"> {
+      if (this.commandQueue.length === 0) return "abort";
+
+      console.log(chalk.bold.yellow("\n📋 Proposed Command Queue:"));
+      this.commandQueue.forEach((cmd, idx) => {
+          console.log(`${idx + 1}. ${chalk.cyan(cmd.name)}(${chalk.dim(JSON.stringify(cmd.parameters))})`);
+      });
+
+      const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout
+      });
+
+      return new Promise((res) => {
+          rl.question(chalk.bold.magenta("\nExecute actions? [(a)ll / (s)tep / (c)ancel]: "), (ans) => {
+              rl.close();
+              const a = ans.toLowerCase();
+              if (a === "a" || a === "all") res("all");
+              else if (a === "s" || a === "step") res("step");
+              else res("abort");
+          });
+      });
+  }
+
   async processInput(input: string): Promise<void> {
     this.history.push({ role: "user", content: input });
     
-    let isComplete = false;
     let turnCount = 0;
     const maxTurns = 12;
 
-    while (!isComplete && turnCount < maxTurns) {
+    while (turnCount < maxTurns) {
       turnCount++;
       
       const spinner = ora({
@@ -86,81 +110,88 @@ export class ChatLoop {
       
       spinner.stop();
       
-      const toolCall = PromptManager.parseToolCall(assistantResponse);
-      const plainText = assistantResponse.replace(/<tool_call>[\s\S]*?<\/tool_call>/, "").trim();
+      this.commandQueue = PromptManager.parseToolCalls(assistantResponse);
+      const plainText = assistantResponse.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "").trim();
       
       if (plainText) {
           console.log(chalk.blue.bold("AI: ") + plainText);
       }
 
-      if (toolCall) {
-        // Validation
-        const validation = this.guard.validateToolCall(toolCall.name, toolCall.parameters);
-        if (!validation.safe) {
-          const errorMsg = `Error: Tool call rejected. ${validation.reason}`;
-          console.log(chalk.red(`\n✖ ${errorMsg}`));
-          this.history.push({ role: "system", content: errorMsg });
-          continue;
-        }
-
-        // Confirmation
-        if (toolCall.name === "run_cmd" || toolCall.name === "cache_global_ref" || toolCall.name === "scaffold_project") {
-          const prompt = toolCall.name === "run_cmd" ? toolCall.parameters.command : 
-                       toolCall.name === "cache_global_ref" ? `Cache URL ${toolCall.parameters.url} as '${toolCall.parameters.name}' globally` :
-                       `Scaffold new ${toolCall.parameters.type} project named '${toolCall.parameters.name}'`;
+      if (this.commandQueue.length > 0) {
+          const mode = await this.requestQueueApproval();
           
-          const confirmed = await this.guard.confirmCommand(prompt);
-          if (!confirmed) {
-            const msg = "User rejected tool execution.";
-            console.log(chalk.yellow(`\n⚠ ${msg}`));
-            this.history.push({ role: "system", content: msg });
-            continue;
-          }
-        }
-
-        const toolSpinner = ora(chalk.yellow(`Executing Tool: ${chalk.bold(toolCall.name)}...`)).start();
-        
-        try {
-          let result: string;
-          
-          // Route to Internal or MCP
-          if (tools[toolCall.name]) {
-            result = await (tools[toolCall.name] as any).execute(toolCall.parameters);
-          } else {
-            result = await this.mcp.callTool(toolCall.name, toolCall.parameters);
+          if (mode === "abort") {
+              console.log(chalk.red("✖ Batch cancelled."));
+              this.commandQueue = [];
+              return;
           }
 
-          const formattedResult = PromptManager.formatToolResult(result);
-          this.history.push({ role: "system", content: formattedResult });
-          
-          toolSpinner.succeed(chalk.green(`Tool Completed: ${toolCall.name}`));
+          let autoApprove = (mode === "all");
 
-          // Verification Loop
-          if (toolCall.name === "write_file" || toolCall.name === "patch_file") {
-            const verifySpinner = ora(chalk.cyan("Auto-Verifying Changes...")).start();
-            const verification = this.runVerification();
-            
-            if (verification.success) {
-              verifySpinner.succeed(chalk.green("Verification Passed."));
-            } else {
-              verifySpinner.fail(chalk.red("Verification Failed."));
-              const debugSpinner = ora(chalk.magenta("Consulting Debugger Agent...")).start();
-              const debuggerAgent = this.agents.getAgent<DebugAgent>("debugger");
-              const analysis = await debuggerAgent.run(verification.output);
-              debugSpinner.stop();
+          while (this.commandQueue.length > 0) {
+              const toolCall = this.commandQueue.shift()!;
               
-              const debugMsg = `Debugger Analysis: ${analysis}\nPlease fix and verify again.`;
-              console.log(chalk.magenta.bold("\n🔍 Debugger: ") + analysis);
-              this.history.push({ role: "system", content: debugMsg });
-            }
+              if (!autoApprove) {
+                  console.log(chalk.yellow(`\nNext action: ${toolCall.name}`));
+                  // We could ask again for each step here if desired
+              }
+
+              // Validation
+              const validation = this.guard.validateToolCall(toolCall.name, toolCall.parameters);
+              if (!validation.safe) {
+                const errorMsg = `Error: Tool call rejected. ${validation.reason}`;
+                console.log(chalk.red(`\n✖ ${errorMsg}`));
+                this.history.push({ role: "system", content: errorMsg });
+                continue;
+              }
+
+              // Special confirmation for dangerous tools if not already in 'all' mode
+              if (!autoApprove && (toolCall.name === "run_cmd" || toolCall.name === "cache_global_ref" || toolCall.name === "scaffold_project")) {
+                  const confirmed = await this.guard.confirmCommand(toolCall.name);
+                  if (!confirmed) {
+                      console.log(chalk.yellow("⚠ Skipped."));
+                      continue;
+                  }
+              }
+
+              const toolSpinner = ora(chalk.yellow(`Executing: ${chalk.bold(toolCall.name)}...`)).start();
+              
+              try {
+                let result: string;
+                if (tools[toolCall.name]) {
+                  result = await (tools[toolCall.name] as any).execute(toolCall.parameters);
+                } else {
+                  result = await this.mcp.callTool(toolCall.name, toolCall.parameters);
+                }
+
+                const formattedResult = PromptManager.formatToolResult(result);
+                this.history.push({ role: "system", content: formattedResult });
+                toolSpinner.succeed(chalk.green(`Done: ${toolCall.name}`));
+
+                // Auto-verify on change
+                if (toolCall.name === "write_file" || toolCall.name === "patch_file") {
+                  const verifySpinner = ora(chalk.cyan("Verifying...")).start();
+                  const verification = this.runVerification();
+                  if (verification.success) {
+                    verifySpinner.succeed(chalk.green("OK."));
+                  } else {
+                    verifySpinner.fail(chalk.red("Fail."));
+                    const debuggerAgent = this.agents.getAgent<DebugAgent>("debugger");
+                    const analysis = await debuggerAgent.run(verification.output);
+                    console.log(chalk.magenta.bold("\n🔍 Debugger: ") + analysis);
+                    this.history.push({ role: "system", content: `Debugger: ${analysis}` });
+                    // On failure, we abort the rest of the queue to allow fix
+                    this.commandQueue = [];
+                  }
+                }
+              } catch (err: any) {
+                toolSpinner.fail(chalk.red(err.message));
+                this.history.push({ role: "system", content: `Error: ${err.message}` });
+              }
           }
-        } catch (err: any) {
-          const errorMsg = `Error executing tool: ${err.message}`;
-          toolSpinner.fail(chalk.red(errorMsg));
-          this.history.push({ role: "system", content: errorMsg });
-        }
       } else {
-        isComplete = true;
+          // No more tools, we are likely done
+          return;
       }
     }
   }

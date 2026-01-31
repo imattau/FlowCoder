@@ -14,6 +14,10 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [Prototyping & Templating](./tracks/prototyping-templates/index.md) - High-leverage tools for scaffolding and pattern-based generation.
 
+- [Command Queuing](./tracks/command-queuing/index.md) - Batch execution and multi-tool turns.
+
+
+
 
 
 
