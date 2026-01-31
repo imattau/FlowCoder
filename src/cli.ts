@@ -133,6 +133,9 @@ export function createCli() {
 
 
         rl.on("line", async (line) => {
+          tm.moveCursor(1, tm.promptRow); // Move to start of input line
+          readline.clearLine(process.stdout, 0); // Clear input line
+
           const input = line.trim();
           
           if (!input) {
