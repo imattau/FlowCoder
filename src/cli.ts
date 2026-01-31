@@ -40,6 +40,15 @@ export function createCli() {
     });
 
   program
+    .command("task <description>")
+    .description("Start a new task")
+    .action((description) => {
+      const id = Date.now().toString();
+      const task = stateManager.createTask(id, description);
+      console.log(chalk.blue(`\n🚀 Task started: ${chalk.bold(task.description)} (ID: ${task.id})`));
+    });
+
+  program
     .command("chat")
     .description("Start an interactive chat session")
     .option("-m, --model <path>", "Path to the GGUF model file")
@@ -73,10 +82,9 @@ export function createCli() {
         
         ui.writeStatusBar(chalk.gray(` CWD: ${process.cwd()} | Default: ${modelPath.split('/').pop()} | Tiny: ${tinyModelPath.split('/').pop()} `));
         
-        // Start the input loop by drawing the initial prompt
+        // Start the input loop
         ui.drawPrompt(chalk.bold.magenta("flowcoder> "));
 
-        // Single 'submit' listener
         ui.inputTextBox.on("submit", async (text: string) => {
           const input = String(text || "").trim();
           
@@ -89,36 +97,24 @@ export function createCli() {
               const [cmd, ...args] = input.slice(1).split(" ");
               switch (cmd) {
                   case "help":
-                      ui.write(`
-${chalk.bold("Available Commands:")}`);
-                      ui.write(`
-${chalk.cyan(" /help")}          Show this help`);
-                      ui.write(`
-${chalk.cyan(" /config")}        Show current configuration`);
-                      ui.write(`
-${chalk.cyan(" /init [name]")}   Initialize .flowcoder setup for the current project`);
-                      ui.write(`
-${chalk.cyan(" /task <desc>")})  Start a new task`);
-                      ui.write(`
-${chalk.cyan(" /clear")}         Clear chat history`);
-                      ui.write(`
-${chalk.cyan(" /exit")}          Exit FlowCoder`);
-                      ui.write(`
-${chalk.cyan(" /quit")}          Exit FlowCoder`);
-                      ui.write(`
-${chalk.cyan(" ! <cmd>")})       Execute shell command directly\n`);
+                      ui.write(`\n${chalk.bold("Available Commands:")}`);
+                      ui.write(`\n${chalk.cyan(" /help")}          Show this help`);
+                      ui.write(`\n${chalk.cyan(" /config")}        Show current configuration`);
+                      ui.write(`\n${chalk.cyan(" /init [name]")}   Initialize .flowcoder setup for the current project`);
+                      ui.write(`\n${chalk.cyan(" /task <desc>")}  Start a new task`);
+                      ui.write(`\n${chalk.cyan(" /clear")}         Clear chat history`);
+                      ui.write(`\n${chalk.cyan(" /exit")}          Exit FlowCoder`);
+                      ui.write(`\n${chalk.cyan(" /quit")}          Exit FlowCoder`);
+                      ui.write(`\n${chalk.cyan(" ! <cmd>")}       Execute shell command directly\n`);
                       break;
                   case "config":
-                      ui.write(`
-${chalk.bold("🛠️  FlowCoder Configuration (Merged):")}`);
-                      ui.write(`
-${chalk.dim(JSON.stringify({
+                      ui.write(`\n${chalk.bold("🛠️  FlowCoder Configuration (Merged):")}`);
+                      ui.write(`\n${chalk.dim(JSON.stringify({
                         FLOWCODER_DIR: currentConfig.FLOWCODER_DIR,
                         MODELS_DIR: currentConfig.MODELS_DIR,
                         DEFAULT_MODEL_FILE: currentConfig.DEFAULT_MODEL_FILE,
                         TINY_MODEL_FILE: currentConfig.TINY_MODEL_FILE
-                      }, null, 2))}
-`);
+                      }, null, 2))}\n`);
                       break;
                   case "init":
                       await projectInitializer.initializeProject(args.join(" ") || undefined);
@@ -127,15 +123,11 @@ ${chalk.dim(JSON.stringify({
                       const id = Date.now().toString();
                       const desc = args.join(" ");
                       stateManager.createTask(id, desc);
-                      ui.write(`
-${chalk.blue("🚀 Task started: ")}${chalk.bold(desc)}
-`);
+                      ui.write(`\n${chalk.blue("🚀 Task started: ${chalk.bold(desc)}")}\n`);
                       break;
                   case "clear":
                       ui.clearScreen();
-                      ui.write(`
-${chalk.yellow("🧹 History cleared.")}
-`);
+                      ui.write(`\n${chalk.yellow("🧹 History cleared.")}\n`);
                       break;
                   case "exit":
                   case "quit":
@@ -143,9 +135,7 @@ ${chalk.yellow("🧹 History cleared.")}
                       await chatLoop.cleanup();
                       process.exit(0);
                   default:
-                      ui.write(`
-${chalk.red("Unknown command: /")}${cmd}
-`);
+                      ui.write(`\n${chalk.red("Unknown command: /${cmd}")}\n`);
               }
               ui.drawPrompt(chalk.bold.magenta("flowcoder> "));
               return;
@@ -154,19 +144,14 @@ ${chalk.red("Unknown command: /")}${cmd}
           if (input.startsWith("!")) {
               const cmd = input.slice(1).trim();
               if (cmd) {
-                  ui.write(chalk.yellow(`
-Executing: ${cmd}`));
+                  ui.write(chalk.yellow(`\nExecuting: ${cmd}`));
                   try {
                       const out = execSync(cmd, { encoding: "utf-8", stdio: "pipe" });
                       ui.write(chalk.green(`✔ Executed: ${cmd}`));
-                      ui.write(`
-${out}`);
+                      ui.write(`\n${out}`);
                   } catch (e: any) {
                       ui.write(chalk.red(`✖ Failed: ${cmd}`));
-                      ui.write(`
-${chalk.red("Command failed:")} ${e.message}
-${e.stdout}
-${e.stderr}`);
+                      ui.write(`\n${chalk.red("Command failed:")} ${e.message}\n${e.stdout}\n${e.stderr}`);
                   }
               }
               ui.drawPrompt(chalk.bold.magenta("flowcoder> "));
@@ -177,9 +162,7 @@ ${e.stderr}`);
             aiTurnInProgress = true;
             await chatLoop.processInput(input);
           } catch (err: any) {
-            ui.write(`
-${chalk.red("Error during chat: ")}${err.message}
-`);
+            ui.write(`\n${chalk.red("Error during chat: ")}${err.message}\n`);
           } finally {
             aiTurnInProgress = false;
           }
@@ -200,8 +183,7 @@ ${chalk.red("Error during chat: ")}${err.message}
         });
 
       } catch (err: any) {
-        console.error(chalk.red(`
-Failed to initialize chat: ${err.message}`));
+        console.error(chalk.red(`\nFailed to initialize chat: ${err.message}`));
         process.exit(1);
       }
     });
