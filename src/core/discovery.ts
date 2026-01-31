@@ -1,4 +1,4 @@
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 
 export interface ProjectCommands {
@@ -8,46 +8,48 @@ export interface ProjectCommands {
 }
 
 export function discoverProjectCommands(cwd: string): ProjectCommands {
-  // 1. Rust (Cargo)
   if (existsSync(join(cwd, "Cargo.toml"))) {
-    return {
-      build: "cargo check",
-      lint: "cargo clippy",
-      test: "cargo test"
-    };
+    return { build: "cargo check", lint: "cargo clippy", test: "cargo test" };
   }
-
-  // 2. Python (look for pyproject.toml, requirements.txt)
   if (existsSync(join(cwd, "pyproject.toml")) || existsSync(join(cwd, "requirements.txt"))) {
-    return {
-      build: "python3 -m py_compile **/*.py", // Basic syntax check
-      lint: existsSync(join(cwd, ".ruff_cache")) || true ? "ruff check ." : "flake8 .",
-      test: "pytest"
-    };
+    return { build: "python3 -m py_compile **/*.py", lint: "ruff check .", test: "pytest" };
   }
-
-  // 3. Go
   if (existsSync(join(cwd, "go.mod"))) {
-    return {
-      build: "go build ./...",
-      lint: "go vet ./...",
-      test: "go test ./..."
-    };
+    return { build: "go build ./...", lint: "go vet ./...", test: "go test ./..." };
   }
-
-  // 4. Node.js (Default fallback if package.json exists)
   if (existsSync(join(cwd, "package.json"))) {
-    return {
-      build: "npm run build",
-      lint: "npm run lint",
-      test: "npm test"
-    };
+    return { build: "npm run build", lint: "npm run lint", test: "npm test" };
   }
+  return { build: "make build", lint: "make lint", test: "make test" };
+}
 
-  // Generic Fallback
-  return {
-    build: "make build",
-    lint: "make lint",
-    test: "make test"
-  };
+export interface ExternalContext {
+    source: string;
+    content: string;
+}
+
+export function findExternalContext(cwd: string): ExternalContext[] {
+    const targets = [
+        ".cursorrules",
+        "CLAUDE.md",
+        ".windsurfrules",
+        "README.md",
+        "CONTRIBUTING.md"
+    ];
+
+    const results: ExternalContext[] = [];
+
+    for (const file of targets) {
+        const path = join(cwd, file);
+        if (existsSync(path)) {
+            try {
+                const content = readFileSync(path, "utf-8").substring(0, 2000);
+                results.push({ source: file, content });
+            } catch (e) {
+                // Ignore read errors
+            }
+        }
+    }
+
+    return results;
 }

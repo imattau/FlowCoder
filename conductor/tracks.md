@@ -19,6 +19,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 - [File-Based Handovers](./tracks/file-handovers/index.md) - Using disk-based state to reduce context size and improve agent communication.
 - [Decomposed Planner Pipeline](./tracks/decomposed-planner/index.md) - Splitting the planner into intent, context, and dispatcher agents.
 - [Project Resumption](./tracks/project-resumption/index.md) - Automatic grounding in existing project state and goals on startup.
+- [Universal Context Discovery](./tracks/universal-discovery/index.md) - Detecting and adopting context from other AI tools and project docs.
 - [Model Lifecycle Management](./tracks/model-lifecycle/index.md) - Dynamic loading and unloading of models to save resources.
 
 
