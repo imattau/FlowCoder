@@ -86,7 +86,9 @@ export function createCli() {
         ui.drawPrompt(chalk.bold.magenta("flowcoder> "));
 
         ui.inputTextBox.on("submit", async (text: string) => {
-          const input = String(text || "").trim();
+          ui.inputTextBox.setValue(""); // Clear the box
+          ui.screen.render();
+          const input = text.trim();
           
           if (!input) {
               ui.drawPrompt(chalk.bold.magenta("flowcoder> "));

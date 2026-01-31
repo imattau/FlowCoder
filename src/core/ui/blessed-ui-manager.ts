@@ -120,7 +120,7 @@ export class BlessedUIManager {
 
     return new Promise((resolve) => {
         this.inputTextBox.readInput((err, value) => {
-            this.inputTextBox.clearValue();
+            this.inputTextBox.setValue(""); // Explicitly clear value
             if (oldLabel) this.inputTextBox.setLabel(oldLabel);
             this.screen.render();
             resolve(value || "");
