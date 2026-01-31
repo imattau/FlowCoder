@@ -9,7 +9,7 @@ import { McpHost } from "./mcp/host.js";
 import { execSync } from "child_process";
 import { discoverProjectCommands, type ProjectCommands } from "./discovery.js";
 import { TerminalManager } from "./ui/terminal-manager.js";
-import { calculateCodeMetrics } from "./utils/code-metrics.js"; // <-- Added this import
+import { calculateCodeMetrics } from "./utils/code-metrics.js";
 import ora from "ora";
 import chalk from "chalk";
 import readline from "readline";
@@ -23,6 +23,7 @@ export class ChatLoop {
   private mcp: McpHost;
   private commandQueue: { name: string, parameters: any }[] = [];
   private tm: TerminalManager;
+  public isInterrupted: boolean = false; // Flag for interruption
 
   constructor(
     private defaultEngine: InferenceEngine,
@@ -44,26 +45,36 @@ export class ChatLoop {
       await this.mcp.init();
       this.history.push({
           role: "system", 
-          content: `You are resuming work on a project. ${this.stateManager.getProjectSummary()}\n${PromptManager.getSystemPrompt(this.mcp.getTools())}` 
+          content: `You are resuming work on a project. ${this.stateManager.getProjectSummary()}
+${PromptManager.getSystemPrompt(this.mcp.getTools())}` 
       });
   }
 
   private runVerification(): { success: boolean, output: string } {
     let combinedOutput = "";
     try {
-      combinedOutput += `[LINTING: ${this.commands.lint}]\n`;
+      combinedOutput += `[LINTING: ${this.commands.lint}]
+`;
       try {
         execSync(this.commands.lint, { encoding: "utf-8", stdio: "pipe" });
       } catch (e: any) {
-        combinedOutput += `Lint Failed:\n${e.stdout?.toString() || ""}\n${e.stderr?.toString() || ""}\n`;
+        combinedOutput += `Lint Failed:
+${e.stdout?.toString() || ""}
+${e.stderr?.toString() || ""}
+`;
       }
       
-      combinedOutput += `\n[BUILDING: ${this.commands.build}]\n`;
+      combinedOutput += `
+[BUILDING: ${this.commands.build}]
+`;
       execSync(this.commands.build, { encoding: "utf-8", stdio: "pipe" });
       
       return { success: true, output: combinedOutput };
     } catch (err: any) {
-      combinedOutput += `\nCRITICAL ERROR:\n${err.stdout?.toString() || ""}\n${err.stderr?.toString() || ""}`;
+      combinedOutput += `
+CRITICAL ERROR:
+${err.stdout?.toString() || ""}
+${err.stderr?.toString() || ""}`;
       return { success: false, output: combinedOutput };
     }
   }
@@ -73,12 +84,13 @@ export class ChatLoop {
 
       this.tm.write(chalk.bold.yellow("\n📋 Proposed Command Queue:"));
       this.commandQueue.forEach((cmd, idx) => {
-          this.tm.write(`\n${idx + 1}. ${chalk.cyan(cmd.name)}(${chalk.dim(JSON.stringify(cmd.parameters))})`);
+          this.tm.write(`
+${idx + 1}. ${chalk.cyan(cmd.name)}(${chalk.dim(JSON.stringify(cmd.parameters))})`);
       });
 
       const rl = readline.createInterface({
           input: process.stdin,
-          output: process.stdout 
+          output: process.stderr // Use process.stderr for readline input to avoid conflict with TM
       });
 
       return new Promise((res) => {
@@ -96,10 +108,12 @@ export class ChatLoop {
   private async askUserPrompt(question: string): Promise<string> {
       const rl = readline.createInterface({
           input: process.stdin,
-          output: process.stdout
+          output: process.stderr
       });
       return new Promise((res) => {
-          rl.question(chalk.bold.magenta(`\n❓ AI Question: ${question}\nYour answer: `), (ans) => {
+          rl.question(chalk.bold.magenta(`
+❓ AI Question: ${question}
+Your answer: `), (ans) => {
               rl.close();
               res(ans);
           });
@@ -108,49 +122,56 @@ export class ChatLoop {
 
   async processInput(input: string): Promise<void> {
     this.history.push({ role: "user", content: input });
+    this.isInterrupted = false; // Reset interruption flag for new turn
     
     let turnCount = 0;
     const maxTurns = 15;
 
-    while (turnCount < maxTurns) {
+    while (turnCount < maxTurns && !this.isInterrupted) {
       turnCount++;
       
       const intentSpinner = ora({
           text: chalk.dim("Analyzing intent..."),
           discardStdin: false,
-          stream: process.stdout
+          stream: process.stderr
       }).start();
 
       const intentAgent = this.agents.getAgent<IntentAgent>("intent");
       const intent = await intentAgent.run(input);
       intentSpinner.stop();
-      this.tm.write(chalk.dim(`Intent: ${intent}\n`));
+      this.tm.write(chalk.dim(`Intent: ${intent}
+`));
+      if (this.isInterrupted) throw new Error("User interrupted.");
 
       const contextSpinner = ora({
           text: chalk.dim("Gathering context..."),
           discardStdin: false,
-          stream: process.stdout
+          stream: process.stderr
       }).start();
       const contextAgent = this.agents.getAgent<ContextAgent>("context");
       const contextResults = await contextAgent.run(input, intent);
       contextSpinner.stop();
+      if (this.isInterrupted) throw new Error("User interrupted.");
       const contextTools = PromptManager.parseToolCalls(contextResults);
       for (const call of contextTools) {
           const res = await (tools[call.name] as any).execute(call.parameters);
           this.history.push({ role: "system", content: PromptManager.formatToolResult(res) });
+          if (this.isInterrupted) throw new Error("User interrupted.");
       }
 
       const dispatchSpinner = ora({
           text: chalk.dim("Planning execution..."),
           discardStdin: false,
-          stream: process.stdout
+          stream: process.stderr
       }).start();
       const dispatcher = this.agents.getAgent<DispatcherAgent>("dispatcher");
       const dispatchResponse = await dispatcher.run(input, this.history.map(h => `${h.role}: ${h.content}`));
       dispatchSpinner.stop();
+      if (this.isInterrupted) throw new Error("User interrupted.");
 
       this.stateManager.writeScratchpad(dispatchResponse);
       await this.defaultEngine.unload();
+      if (this.isInterrupted) throw new Error("User interrupted.");
 
       let finalTurnResponse = dispatchResponse;
       if (dispatchResponse.includes("PatchAgent")) {
@@ -169,6 +190,7 @@ export class ChatLoop {
           finalTurnResponse = await weaver.run("Context updated in scratchpad.");
           weaverSpinner.stop();
       }
+      if (this.isInterrupted) throw new Error("User interrupted.");
 
       this.commandQueue = PromptManager.parseToolCalls(finalTurnResponse);
       const plainText = finalTurnResponse.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "").trim();
@@ -187,7 +209,7 @@ export class ChatLoop {
 
           let autoApprove = (mode === "all");
 
-          while (this.commandQueue.length > 0) {
+          while (this.commandQueue.length > 0 && !this.isInterrupted) {
               const toolCall = this.commandQueue.shift()!;
               
               if (!autoApprove) {

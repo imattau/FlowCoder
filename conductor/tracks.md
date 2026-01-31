@@ -20,6 +20,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 - [Decomposed Planner Pipeline](./tracks/decomposed-planner/index.md) - Splitting the planner into intent, context, and dispatcher agents.
 - [Project Resumption](./tracks/project-resumption/index.md) - Automatic grounding in existing project state and goals on startup.
 - [Modular & OO Code Generation](./tracks/modular-oo/index.md) - Prioritizing modular and object-oriented code from the outset.
+- [Robust UI Interaction & Output Management](./tracks/ui-interaction/index.md) - Implementing Esc interruption, command indicators, and correct output routing.
 - [LSP Integration & Advanced Indexing](./tracks/lsp-indexing/index.md) - Integrating Language Server Protocol for precise code understanding.
 - [Enhanced Terminal UI](./tracks/enhanced-ui/index.md) - Creating a bounded command line and working area.
 - [Universal Context Discovery](./tracks/universal-discovery/index.md) - Detecting and adopting context from other AI tools and project docs.

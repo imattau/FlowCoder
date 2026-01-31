@@ -27,6 +27,9 @@ export function createCli() {
   const tm = TerminalManager.getInstance();
   const projectInitializer = new ProjectInitializer();
 
+  // Flag to indicate if an AI turn is in progress
+  let aiTurnInProgress = false;
+
   program
     .name("flowcoder")
     .description("Run local AI Coding assistant")
@@ -105,6 +108,26 @@ export function createCli() {
           prompt: chalk.bold.magenta("flowcoder> "),
         });
 
+        // Setup for Esc interruption
+        if (process.stdin.isTTY) {
+            process.stdin.setRawMode(true);
+            process.stdin.on('data', (key) => {
+                // Ctrl+C also exits
+                if (key.toString() === '\x03') { // Ctrl+C
+                    tm.showCursor();
+                    tm.write(chalk.cyan("\n👋 Happy coding!\n"));
+                    process.exit(0);
+                }
+                // Esc key
+                if (key.toString() === '\x1b') { // Esc
+                    if (aiTurnInProgress) {
+                        chatLoop.isInterrupted = true; // Signal ChatLoop to stop
+                    }
+                }
+            });
+        }
+
+
         rl.on("line", async (line) => {
           // Clear current prompt line before writing anything else
           tm.moveCursor(1, tm.promptRow);
@@ -171,7 +194,6 @@ export function createCli() {
                   default:
                       tm.write(`\n${chalk.red("Unknown command: /${cmd}")}\n`);
               }
-              // After processing a command, re-render to ensure prompt is correct
               tm.render();
               rl.prompt();
               return;
@@ -180,11 +202,14 @@ export function createCli() {
           if (input.startsWith("!")) {
               const cmd = input.slice(1).trim();
               if (cmd) {
-                  tm.write(`\n${chalk.yellow(`Executing: ${cmd}`)}\n`);
+                  const commandSpinner = ora(chalk.yellow(`Executing: ${cmd}`)).start();
                   try {
-                      execSync(cmd, { stdio: "inherit" });
+                      const out = execSync(cmd, { encoding: "utf-8", stdio: "pipe" });
+                      commandSpinner.succeed(chalk.green(`Executed: ${cmd}`));
+                      tm.write(`\n${out}`);
                   } catch (e: any) {
-                      tm.write(`\n${chalk.red(`Command failed: ${e.message}`)}\n`);
+                      commandSpinner.fail(chalk.red(`Failed: ${cmd}`));
+                      tm.write(`\n${chalk.red("Command failed:")} ${e.message}\n${e.stdout}\n${e.stderr}`);
                   }
               }
               tm.render();
@@ -193,11 +218,14 @@ export function createCli() {
           }
 
           try {
+            aiTurnInProgress = true;
             await chatLoop.processInput(input);
           } catch (err: any) {
-            tm.write(`\n${chalk.red(`Error during chat: ${err.message}`)}\n`);
+            tm.write(`\n${chalk.red("Error during chat: ")}${err.message}\n`);
+          } finally {
+            aiTurnInProgress = false;
           }
-          tm.render(); // Ensure render after AI turn
+          tm.render();
           rl.prompt();
         }).on("close", async () => {
           await chatLoop.cleanup();
@@ -206,7 +234,7 @@ export function createCli() {
           process.exit(0);
         });
       } catch (err: any) {
-        tm.write(`\n${chalk.red(`Failed to initialize chat: ${err.message}`)}\n`);
+        tm.write(`\n${chalk.red("Failed to initialize chat: ")}${err.message}\n`);
         process.exit(1);
       }
     });
