@@ -97,7 +97,7 @@ export function createCli() {
         await chatLoop.init();
 
         tm.clearScreen();
-        tm.write(chalk.green("✨ FlowCoder ready. Type '/help' for internal commands or 'exit' to quit.\n"));
+        tm.write(chalk.green("✨ FlowCoder ready. Type '/help' for internal commands or '/exit' to quit.\n"));
         tm.write(chalk.dim("----------------------------------------------------------------------\n"));
         tm.showCursor();
 
@@ -112,14 +112,19 @@ export function createCli() {
         if (process.stdin.isTTY) {
             process.stdin.setRawMode(true);
             process.stdin.on('data', (key) => {
+                // Ctrl+C also exits
                 if (key.toString() === '\x03') { // Ctrl+C
                     tm.showCursor();
                     tm.write(chalk.cyan("\n👋 Happy coding!\n"));
                     process.exit(0);
                 }
+                // Esc key
                 if (key.toString() === '\x1b') { // Esc
                     if (aiTurnInProgress) {
-                        chatLoop.isInterrupted = true;
+                        chatLoop.isInterrupted = true; // Signal ChatLoop to stop
+                        tm.write(chalk.red("\nAI turn interrupted by user. Returning control...\n"));
+                        tm.render();
+                        rl.prompt();
                     }
                 }
             });
@@ -133,15 +138,13 @@ export function createCli() {
           const input = line.trim();
           
           if (!input) {
+              tm.render(); // Re-render to ensure prompt is correct
               rl.prompt();
               return;
           }
 
-          if (input.toLowerCase() === "exit" || input.toLowerCase() === "quit") {
-            rl.close();
-            return;
-          }
-
+          // --- Command Interception ---
+          
           if (input.startsWith("/")) {
               const [cmd, ...args] = input.slice(1).split(" ");
               switch (cmd) {
@@ -149,9 +152,11 @@ export function createCli() {
                       tm.write(`\n${chalk.bold("Available Commands:")}`);
                       tm.write(`\n${chalk.cyan(" /help")}          Show this help`);
                       tm.write(`\n${chalk.cyan(" /config")}        Show current configuration`);
-                      tm.write(`\n${chalk.cyan(" /init [name]")})   Initialize .flowcoder setup for the current project`);
+                      tm.write(`\n${chalk.cyan(" /init [name]")}   Initialize .flowcoder setup for the current project`);
                       tm.write(`\n${chalk.cyan(" /task <desc>")})  Start a new task`);
                       tm.write(`\n${chalk.cyan(" /clear")}         Clear chat history`);
+                      tm.write(`\n${chalk.cyan(" /exit")}          Exit FlowCoder`);
+                      tm.write(`\n${chalk.cyan(" /quit")}          Exit FlowCoder`);
                       tm.write(`\n${chalk.cyan(" ! <cmd>")})       Execute shell command directly\n`);
                       break;
                   case "config":
@@ -186,8 +191,12 @@ export function createCli() {
                       tm.clearScreen();
                       tm.write(`\n${chalk.yellow("🧹 History cleared.")}\n`);
                       break;
+                  case "exit":
+                  case "quit":
+                      rl.close();
+                      return;
                   default:
-                      tm.write(`\n${chalk.red(`Unknown command: /${cmd}`)}\n`);
+                      tm.write(`\n${chalk.red("Unknown command: /${cmd}")}\n`);
               }
               tm.render();
               rl.prompt();
