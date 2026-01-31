@@ -1,4 +1,5 @@
 import readline from "readline";
+import { Writable } from "stream";
 
 export class TerminalManager {
     private static instance: TerminalManager;
@@ -12,6 +13,9 @@ export class TerminalManager {
     private promptHeight: number = 1; 
     private statusBarHeight: number = 1;
     private commandLineHeight: number = 3; // Input line + top/bottom border
+    private readlineInputBuffer: string = ""; // Buffer for readline current line
+    private readlineCursorPos: number = 0; // Cursor position within readline's line
+    private currentPrompt: string = ""; // Store current prompt for redraws
 
     private constructor(stream: NodeJS.WriteStream) {
         this.stream = stream;
@@ -20,6 +24,7 @@ export class TerminalManager {
             this._columns = process.stdout.columns;
             this.updateLayoutMetrics();
             this.render(); // Redraw on resize
+            this.drawPrompt(this.currentPrompt); // Redraw prompt after resize
         });
         this.updateLayoutMetrics();
     }
@@ -115,21 +120,39 @@ export class TerminalManager {
     }
 
     drawPrompt(promptText: string) {
+        this.currentPrompt = promptText; // Store for redraws
         this.stream.write("\x1b[s"); // Save cursor position
         this.moveCursor(2, this.promptRow); // Move inside the box
         readline.clearLine(this.stream, 0); // Clear the line within the box
-        this.stream.write(promptText);
+        this.stream.write(promptText + this.readlineInputBuffer);
+        this.moveCursor(2 + promptText.length + this.readlineCursorPos, this.promptRow); // Position cursor within input
         this.stream.write("\x1b[u"); // Restore cursor position
     }
 
-    writeStatusBar(text: string) {
-        this.stream.write("\x1b[s"); // Save cursor
-        this.moveCursor(1, this.statusBarRow);
-        readline.clearLine(this.stream, 0);
-        this.stream.write(text.substring(0, this.columns));
-        this.stream.write("\x1b[u"); // Restore cursor
+    getReadlineStream(): NodeJS.WritableStream {
+        return new Writable({
+            write: (chunk: Buffer, encoding: string, callback: () => void) => {
+                const data = chunk.toString();
+                // We need to intercept cursor movements and line clearings from readline
+                // This is a simplified approach, a full solution needs ANSI parsing
+                if (data.includes('\x1b[K')) { // Clear line from cursor to end
+                    this.moveCursor(2, this.promptRow);
+                    readline.clearLine(this.stream, 0);
+                    this.stream.write(this.currentPrompt + this.readlineInputBuffer); // Redraw prompt and buffer
+                } else if (data.includes('\x1b[C')) { // Cursor forward
+                    this.readlineCursorPos++;
+                } else if (data.includes('\x1b[D')) { // Cursor backward
+                    this.readlineCursorPos--;
+                } else {
+                    // Assume it's new input or a prompt redraw from readline
+                    this.readlineInputBuffer = data.replace(/\x1b\[(\d+;\d+)H/, '').replace(this.currentPrompt, ''); // Strip cursor moves and current prompt
+                    this.drawPrompt(this.currentPrompt); // Redraw with updated buffer
+                }
+                callback();
+            }
+        });
     }
-    
+
     hideCursor() {
         this.stream.write("\x1b[?25l");
     }
@@ -150,5 +173,13 @@ export class TerminalManager {
             this.scrollOffset++;
             this.render();
         }
+    }
+
+    writeStatusBar(text: string) {
+        this.stream.write("\x1b[s"); // Save cursor
+        this.moveCursor(1, this.statusBarRow);
+        readline.clearLine(this.stream, 0);
+        this.stream.write(text.substring(0, this.columns));
+        this.stream.write("\x1b[u"); // Restore cursor
     }
 }

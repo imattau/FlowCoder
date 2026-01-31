@@ -103,12 +103,12 @@ export function createCli() {
 
         const rl = readline.createInterface({
           input: process.stdin,
-          output: process.stdout,
+          output: tm.getReadlineStream(), // Use the proxy stream
           prompt: "", // No default prompt
           terminal: true,
         });
 
-        tm.writeStatusBar(chalk.gray(` CWD: ${process.cwd()} | Default: ${currentConfig.DEFAULT_MODEL_FILE} | Tiny: ${currentConfig.TINY_MODEL_FILE} `));
+        tm.writeStatusBar(chalk.gray(` CWD: ${process.cwd()} | Default: ${modelPath.split('/').pop()} | Tiny: ${tinyModelPath.split('/').pop()} `));
         tm.render(); // Initial render to draw the box and position cursor
         tm.drawPrompt(chalk.bold.magenta("flowcoder> "));
 
@@ -133,8 +133,9 @@ export function createCli() {
 
 
         rl.on("line", async (line) => {
-          tm.moveCursor(1, tm.promptRow); // Move to start of input line
-          readline.clearLine(process.stdout, 0); // Clear input line
+          // Input line is handled by readlineProxyStream now, no manual clearing
+          // tm.moveCursor(1, tm.promptRow); 
+          // readline.clearLine(process.stdout, 0);
 
           const input = line.trim();
           
