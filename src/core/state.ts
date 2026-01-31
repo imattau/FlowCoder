@@ -29,11 +29,24 @@ export class StateManager {
     const tasksDir = join(this.dotFolder, "tasks");
     if (!existsSync(tasksDir)) mkdirSync(tasksDir);
     
+    const contextDir = join(this.dotFolder, "context");
+    if (!existsSync(contextDir)) mkdirSync(contextDir);
+
     const decisions = join(this.dotFolder, "decisions.md");
     if (!existsSync(decisions)) writeFileSync(decisions, "# Architectural Decisions\n\n");
 
     const refs = join(this.dotFolder, "references.md");
     if (!existsSync(refs)) writeFileSync(refs, "# References\n\n");
+  }
+
+  writeScratchpad(content: string) {
+    writeFileSync(join(this.dotFolder, "context", "scratchpad.md"), content);
+  }
+
+  readScratchpad(): string {
+    const path = join(this.dotFolder, "context", "scratchpad.md");
+    if (!existsSync(path)) return "";
+    return readFileSync(path, "utf-8");
   }
 
   saveProject(state: ProjectState) {

@@ -102,36 +102,37 @@ export class ChatLoop {
           discardStdin: false
       }).start();
 
-      // 1. PLanning Turn
       const planner = this.agents.getAgent<PlannerAgent>("planner");
       const plannerResponse = await planner.run(input, this.history.map(h => `${h.role}: ${h.content}`));
       
       spinner.stop();
 
-      // 2. Specialized Delegation
+      // DISK-BASED HANDOVER: Write planner intent to scratchpad
+      this.stateManager.writeScratchpad(plannerResponse);
+
       let finalTurnResponse = plannerResponse;
       
       if (plannerResponse.includes("PatchAgent")) {
           const patchSpinner = ora(chalk.cyan("Delegating to PatchAgent (Sniper)...")).start();
           const patcher = this.agents.getAgent<any>("patcher");
-          finalTurnResponse = await patcher.run(plannerResponse);
+          finalTurnResponse = await patcher.run("Context updated in scratchpad.");
           patchSpinner.stop();
       } else if (plannerResponse.includes("BoilerplateAgent")) {
           const buildSpinner = ora(chalk.cyan("Delegating to BoilerplateAgent (Builder)...")).start();
           const builder = this.agents.getAgent<any>("boilerplate");
-          finalTurnResponse = await builder.run(plannerResponse);
+          finalTurnResponse = await builder.run("Context updated in scratchpad.");
           buildSpinner.stop();
       } else if (plannerResponse.includes("TemplateAgent")) {
           const weaverSpinner = ora(chalk.cyan("Delegating to TemplateAgent (Weaver)...")).start();
           const weaver = this.agents.getAgent<any>("template");
-          finalTurnResponse = await weaver.run(plannerResponse);
+          finalTurnResponse = await weaver.run("Context updated in scratchpad.");
           weaverSpinner.stop();
       }
 
       this.commandQueue = PromptManager.parseToolCalls(finalTurnResponse);
       const plainText = finalTurnResponse.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "").trim();
       
-      if (plainText) {
+      if (plainText && !plainText.includes("patch_file")) {
           console.log(chalk.blue.bold("AI: ") + plainText);
       }
 
@@ -190,8 +191,13 @@ export class ChatLoop {
                     verifySpinner.succeed(chalk.green("OK."));
                   } else {
                     verifySpinner.fail(chalk.red("Fail."));
+                    
                     const debuggerAgent = this.agents.getAgent<DebugAgent>("debugger");
                     const analysis = await debuggerAgent.run(verification.output);
+                    
+                    // Save debugger analysis to scratchpad for the next coder attempt
+                    this.stateManager.writeScratchpad(analysis);
+                    
                     console.log(chalk.magenta.bold("\n🔍 Debugger: ") + analysis);
                     this.history.push({ role: "system", content: `Debugger: ${analysis}` });
                     this.commandQueue = [];
