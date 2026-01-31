@@ -5,9 +5,11 @@ import * as diff from "diff";
 import { GlobalStateManager } from "./global-state.js";
 import { scaffoldProject, type ProjectType } from "./prototyping/scaffold.js";
 import { TemplateEngine } from "./prototyping/templates.js";
+import { RefactorEngine } from "./prototyping/refactor.js";
 
 const globalState = new GlobalStateManager();
 const templateEngine = new TemplateEngine();
+const refactorEngine = new RefactorEngine();
 
 export interface Tool {
   name: string;
@@ -261,6 +263,19 @@ export const tools: Record<string, Tool> = {
     execute: () => {
       const templates = templateEngine.listTemplates();
       return templates.length > 0 ? templates.join("\n") : "No templates found.";
+    }
+  },
+
+  refactor_rename: {
+    name: "refactor_rename",
+    description: "Semantically rename a symbol (variable, function, class) across a file using AST.",
+    parameters: {
+      path: { type: "string", description: "Path to the source file." },
+      old_name: { type: "string", description: "The current name of the symbol." },
+      new_name: { type: "string", description: "The new name for the symbol." }
+    },
+    execute: async (args: { path: string, old_name: string, new_name: string }) => {
+      return await refactorEngine.renameSymbol(args.path, args.old_name, args.new_name);
     }
   },
 

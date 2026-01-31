@@ -12,9 +12,8 @@ export class PlannerAgent extends BaseAgent {
 "Check for existing global documentation using use_global_ref.\n" +
 "If starting a new project, use scaffold_project.\n" +
 "If creating common code patterns (components, routes), check list_templates and use apply_template.\n" +
-"If you need more information, use search, read_file, or fetch_url.\n" +
-"If you are ready to implement, use patch_file or write_file.\n" +
-"Always verify your work.";
+"If renaming variables or classes, prefer refactor_rename for semantic safety.\n" +
+"If you need more information, use search, read_file, or fetch_url.";
 
   async run(input: string, history: string[] = []): Promise<string> {
     const fullPrompt = `
@@ -48,6 +47,7 @@ export class DebugAgent extends BaseAgent {
   private static PROMPT = "You are the Debugger. Your job is to analyze error messages, logs, and stack traces.\n" +
 "Identify if the failure is caused by an API mismatch or hallucinated function call.\n" +
 "If it is, use inspect_library or search to find the correct API signature.\n" +
+"If the error is due to a missing or renamed symbol, suggest using refactor_rename.\n" +
 "Provide a concise explanation of the fix for the Coder.";
 
   async run(errorLog: string): Promise<string> {

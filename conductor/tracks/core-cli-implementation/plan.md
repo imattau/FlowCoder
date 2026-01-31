@@ -23,6 +23,6 @@ Goal: A conversational interface.
 - [x] **Step 3.2:** Output Streaming
 
 ## Phase 4: Polish & Packaging
-- [x] **Step 4.1:** Configuration
+- [x] **Step 4.1:** Configuration (Persistent `.flowcoder.json`)
 - [x] **Step 4.2:** Safety & Sandbox
 - [x] **Step 4.3:** README & Documentation.

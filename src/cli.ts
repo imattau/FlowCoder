@@ -3,10 +3,12 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { fileURLToPath } from "url";
 import { CONFIG } from "./config.js";
+import { ConfigManager } from "./core/config-manager.js";
 import { ModelManager } from "./core/model-manager.js";
 import { InferenceEngine } from "./core/inference.js";
 import { ChatLoop } from "./core/chat-loop.js";
 import { StateManager } from "./core/state.js";
+import { LlamaLogLevel } from "node-llama-cpp";
 import { execSync } from "child_process";
 import readline from "readline";
 import ora from "ora";
@@ -17,7 +19,8 @@ const pkg = JSON.parse(readFileSync(join(__dirname, "../package.json"), "utf8"))
 
 export function createCli() {
   const program = new Command();
-  const modelManager = new ModelManager();
+  const currentConfig = ConfigManager.loadLocalConfig();
+  const modelManager = new ModelManager(currentConfig.MODELS_DIR);
   const stateManager = new StateManager();
 
   program
@@ -131,8 +134,8 @@ export function createCli() {
                       console.log(chalk.cyan(" ! <cmd>") + "       Execute shell command directly\n");
                       break;
                   case "config":
-                      console.log(chalk.bold("\n🛠️  FlowCoder Configuration:"));
-                      console.log(chalk.dim(JSON.stringify(CONFIG, null, 2)));
+                      console.log(chalk.bold("\n🛠️  FlowCoder Configuration (Merged):"));
+                      console.log(chalk.dim(JSON.stringify(currentConfig, null, 2)));
                       break;
                   case "task":
                       const id = Date.now().toString();
