@@ -4,12 +4,16 @@ import { join } from "path";
 import { getLlama } from "node-llama-cpp";
 import { Readable } from "stream";
 import { finished } from "stream/promises";
+import { BlessedUIManager } from "./ui/blessed-ui-manager.js";
+import chalk from "chalk";
 
 export class ModelManager {
   private modelsDir: string;
+  private ui: BlessedUIManager;
 
   constructor(modelsDir: string = CONFIG.MODELS_DIR) {
     this.modelsDir = modelsDir;
+    this.ui = BlessedUIManager.getInstance();
     if (!existsSync(this.modelsDir)) {
       mkdirSync(this.modelsDir, { recursive: true });
     }
@@ -30,8 +34,8 @@ export class ModelManager {
     }
 
     const url = `https://huggingface.co/${repo}/resolve/main/${fileName}`;
-    console.log(`Downloading model ${fileName} from ${repo}...`);
-    console.log(`URL: ${url}`);
+    this.ui.write(chalk.cyan(`Downloading model ${fileName} from ${repo}...`));
+    this.ui.write(chalk.dim(`URL: ${url}`));
     
     const response = await fetch(url);
 
@@ -44,14 +48,13 @@ export class ModelManager {
     }
 
     const writer = createWriteStream(targetPath);
-    // Convert Web Stream to Node Stream
     const nodeReadable = Readable.fromWeb(response.body as any);
     
     nodeReadable.pipe(writer);
 
     await finished(writer);
     
-    console.log(`\nSuccessfully downloaded ${fileName}`);
+    this.ui.write(chalk.green(`\nSuccessfully downloaded ${fileName}`));
     return targetPath;
   }
 

@@ -6,6 +6,8 @@ import { GlobalStateManager } from "./global-state.js";
 import { scaffoldProject, type ProjectType } from "./prototyping/scaffold.js";
 import { TemplateEngine } from "./prototyping/templates.js";
 import { RefactorEngine } from "./prototyping/refactor.js";
+import { BlessedUIManager } from "./ui/blessed-ui-manager.js";
+import chalk from "chalk";
 
 const globalState = new GlobalStateManager();
 const templateEngine = new TemplateEngine();
@@ -62,6 +64,7 @@ export const tools: Record<string, Tool> = {
       replace: { type: "string", description: "The new code to replace it with." }
     },
     execute: (args: { path: string, search: string, replace: string }) => {
+      const ui = BlessedUIManager.getInstance();
       try {
         if (!existsSync(args.path)) return `Error: File not found at ${args.path}`;
         const content = readFileSync(args.path, "utf-8");
@@ -72,13 +75,13 @@ export const tools: Record<string, Tool> = {
         const newContent = content.replace(args.search, args.replace);
         
         const patch = diff.createPatch(args.path, content, newContent);
-        console.log("\n--- DIFF ---");
+        ui.write(chalk.bold("\n--- DIFF ---"));
         patch.split("\n").forEach((line: string) => {
-          if (line.startsWith("+")) console.log(`\x1b[32m${line}\x1b[0m`);
-          else if (line.startsWith("-")) console.log(`\x1b[31m${line}\x1b[0m`);
-          else console.log(line);
+          if (line.startsWith("+")) ui.write(chalk.green(line));
+          else if (line.startsWith("-")) ui.write(chalk.red(line));
+          else ui.write(line);
         });
-        console.log("------------\n");
+        ui.write(chalk.bold("------------\n"));
 
         writeFileSync(args.path, newContent);
         return `Successfully patched ${args.path}`;
@@ -278,21 +281,6 @@ Stderr: ${err.stderr}`;
     },
     execute: async (args: { path: string, old_name: string, new_name: string }) => {
       return await refactorEngine.renameSymbol(args.path, args.old_name, args.new_name);
-    }
-  },
-
-  get_git_context: {
-    name: "get_git_context",
-    description: "Get current git status and recent diffs.",
-    parameters: {},
-    execute: () => {
-      try {
-        const status = execSync("git status -s", { encoding: "utf-8" });
-        const diff = execSync("git diff HEAD --stat", { encoding: "utf-8" });
-        return `Status:\n${status || "Clean"}\n\nDiff Summary:\n${diff || "No changes"}`;
-      } catch (err: any) {
-        return `Error getting git context: ${err.message}`;
-      }
     }
   },
 

@@ -34,20 +34,11 @@ export function createCli() {
     .version(pkg.version);
 
   program
-    .command("init")
+    .command("init [name]")
     .description("Initialize FlowCoder environment and download models")
-    .action(async () => {
-      const spinner = ora(chalk.cyan("Initializing FlowCoder...")).start();
-      try {
-        spinner.text = chalk.cyan("Downloading default model (1.5B)...");
-        await modelManager.downloadDefaultModel();
-        spinner.text = chalk.cyan("Downloading tiny model (0.5B)...");
-        await modelManager.downloadTinyModel();
-        spinner.succeed(chalk.green("Environment ready."));
-      } catch (err: any) {
-        spinner.fail(chalk.red(`Failed to initialize: ${err.message}`));
-        process.exit(1);
-      }
+    .action(async (name?: string) => {
+        // Initializing from outside chat - use console.log
+        await projectInitializer.initializeProject(name);
     });
 
   program
@@ -56,7 +47,8 @@ export function createCli() {
     .action((description) => {
       const id = Date.now().toString();
       const task = stateManager.createTask(id, description);
-      ui.write(`\n${chalk.blue(`🚀 Task started: ${chalk.bold(task.description)} (ID: ${task.id})`)}\n`);
+      // If outside chat, this will fail or misbehave if UI is not started
+      console.log(chalk.blue(`\n🚀 Task started: ${chalk.bold(task.description)} (ID: ${task.id})`));
     });
 
   program
@@ -69,18 +61,17 @@ export function createCli() {
 
       if (!modelPath) {
         if (!(await modelManager.isModelDownloaded())) {
-            const spinner = ora(chalk.yellow("Default model not found. Downloading...")).start();
+            // Note: This happens BEFORE ui is fully initialized/rendered often
+            console.log(chalk.yellow("Default model not found. Downloading..."));
             modelPath = await modelManager.downloadDefaultModel();
-            spinner.succeed();
         } else {
             modelPath = modelManager.getModelPath();
         }
       }
 
       if (!(await modelManager.isModelDownloaded(CONFIG.TINY_MODEL_FILE))) {
-          const spinner = ora(chalk.yellow("Tiny model not found. Downloading...")).start();
+          console.log(chalk.yellow("Tiny model not found. Downloading..."));
           await modelManager.downloadTinyModel();
-          spinner.succeed();
       }
 
       try {
@@ -100,7 +91,7 @@ export function createCli() {
         ui.writeStatusBar(chalk.gray(` CWD: ${process.cwd()} | Default: ${modelPath.split('/').pop()} | Tiny: ${tinyModelPath.split('/').pop()} `));
         ui.drawPrompt(chalk.bold.magenta("flowcoder> "));
 
-        ui.inputTextBox.on("submit", async (text: string) => { // Explicitly typed text
+        ui.inputTextBox.on("submit", async (text: string) => {
           const input = text.trim();
           
           if (!input) {
@@ -148,7 +139,7 @@ export function createCli() {
                       const id = Date.now().toString();
                       const desc = args.join(" ");
                       stateManager.createTask(id, desc);
-                      ui.write(`\n${chalk.blue(`🚀 Task started: ${chalk.bold(desc)}`)}\n`);
+                      ui.write(`\n${chalk.blue("🚀 Task started: ${chalk.bold(desc)}")}\n`);
                       break;
                   case "clear":
                       ui.clearScreen();
@@ -156,11 +147,11 @@ export function createCli() {
                       break;
                   case "exit":
                   case "quit":
-                      ui.screen.destroy(); // Properly destroy blessed screen
+                      ui.screen.destroy();
                       await chatLoop.cleanup();
                       process.exit(0);
                   default:
-                      ui.write(`\n${chalk.red(`Unknown command: /${cmd}`)}\n`);
+                      ui.write(`\n${chalk.red("Unknown command: /${cmd}")}\n`);
               }
               ui.drawPrompt(chalk.bold.magenta("flowcoder> "));
               return;
@@ -169,13 +160,13 @@ export function createCli() {
           if (input.startsWith("!")) {
               const cmd = input.slice(1).trim();
               if (cmd) {
-                  const commandSpinner = ora(chalk.yellow(`Executing: ${cmd}`)).start(); // Use ora for external command output
+                  ui.write(chalk.yellow(`\nExecuting: ${cmd}`));
                   try {
                       const out = execSync(cmd, { encoding: "utf-8", stdio: "pipe" });
-                      commandSpinner.succeed(chalk.green(`Executed: ${cmd}`));
+                      ui.write(chalk.green(`✔ Executed: ${cmd}`));
                       ui.write(`\n${out}`);
                   } catch (e: any) {
-                      commandSpinner.fail(chalk.red(`Failed: ${cmd}`));
+                      ui.write(chalk.red(`✖ Failed: ${cmd}`));
                       ui.write(`\n${chalk.red("Command failed:")} ${e.message}\n${e.stdout}\n${e.stderr}`);
                   }
               }
@@ -187,14 +178,13 @@ export function createCli() {
             aiTurnInProgress = true;
             await chatLoop.processInput(input);
           } catch (err: any) {
-            ui.write(`\n${chalk.red(`Error during chat: ${err.message}`)}\n`);
+            ui.write(`\n${chalk.red("Error during chat: ${err.message}")}\n`);
           } finally {
             aiTurnInProgress = false;
           }
           ui.drawPrompt(chalk.bold.magenta("flowcoder> "));
         });
 
-        // Handle Esc interruption
         ui.screen.key(["escape"], (ch, key) => {
             if (aiTurnInProgress) {
                 chatLoop.isInterrupted = true;
@@ -203,16 +193,14 @@ export function createCli() {
             }
         });
 
-        // Handle Ctrl+C (blessed catches it)
         ui.screen.key(["C-c"], async (ch, key) => {
-            ui.screen.destroy(); // Clean up blessed screen
+            ui.screen.destroy();
             await chatLoop.cleanup();
             process.exit(0);
         });
 
       } catch (err: any) {
-        ui.write(`\n${chalk.red(`Failed to initialize chat: ${err.message}`)}\n`);
-        ui.screen.destroy();
+        console.error(chalk.red(`\nFailed to initialize chat: ${err.message}`));
         process.exit(1);
       }
     });
@@ -221,9 +209,6 @@ export function createCli() {
     .command("config")
     .description("View current configuration")
     .action(() => {
-        // This command currently doesn't use the blessed UI directly, 
-        // as it's a non-interactive CLI command.
-        // For consistency, future implementations might route this through a blessed popup or similar.
         console.log(chalk.bold("\n🛠️  FlowCoder Configuration:"));
         console.log(chalk.dim(JSON.stringify(CONFIG, null, 2)) + "\n");
     });

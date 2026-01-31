@@ -1,6 +1,7 @@
 import { getLlama, LlamaChatSession, LlamaLogLevel, type LlamaModel, type LlamaContext } from "node-llama-cpp";
 import ora from "ora";
 import chalk from "chalk";
+import { BlessedUIManager } from "./ui/blessed-ui-manager.js";
 
 type ModelLoadStatus = "idle" | "loading" | "loaded";
 
@@ -11,9 +12,14 @@ export class InferenceEngine {
   private modelPath: string | null = null;
   private loadPromise: Promise<void> | null = null; // To track ongoing loading
   private status: ModelLoadStatus = "idle";
+  private ui: BlessedUIManager;
   
   private lastInferenceTime: number = 0;
   private lastTokenCount: number = 0;
+
+  constructor() {
+      this.ui = BlessedUIManager.getInstance();
+  }
 
   async init(modelPath: string) {
     this.modelPath = modelPath;
@@ -22,7 +28,10 @@ export class InferenceEngine {
   private async performLoad() {
     if (!this.modelPath) throw new Error("Model path not set.");
 
-    const spinner = ora(chalk.dim(`Loading model: \${this.modelPath.split('/').pop()}...`)).start();
+    const modelName = this.modelPath.split('/').pop();
+    this.ui.write(chalk.dim(`Loading model: \${modelName}...`));
+    this.ui.writeStatusBar(chalk.yellow(`Loading AI: \${modelName}...`));
+
     try {
         const llama = await getLlama({
             logLevel: LlamaLogLevel.disabled
@@ -36,10 +45,11 @@ export class InferenceEngine {
           contextSequence: this.context.getSequence(),
         });
         this.status = "loaded";
-        spinner.succeed(chalk.dim(`Model loaded: \${this.modelPath.split('/').pop()}`));
+        this.ui.write(chalk.green(`✔ Model loaded: \${modelName}`));
+        this.ui.writeStatusBar(chalk.gray("AI model ready."));
     } catch (err: any) {
-        this.status = "idle"; // Reset status on failure
-        spinner.fail(chalk.red(`Failed to load model \${this.modelPath}: \${err.message}`));
+        this.status = "idle";
+        this.ui.write(chalk.red(`✖ Failed to load model \${modelPath}: \${err.message}`));
         throw err;
     } finally {
         this.loadPromise = null;
@@ -60,7 +70,6 @@ export class InferenceEngine {
     if (this.status !== "idle") return; // Already loading or loaded
     this.status = "loading";
     this.loadPromise = this.performLoad();
-    // Don't await, let it run in background
   }
 
   async generateResponse(prompt: string, onToken?: (token: string) => void): Promise<string> {
@@ -95,7 +104,7 @@ export class InferenceEngine {
           this.context = null;
           this.model = null;
           this.status = "idle";
-          console.log(chalk.dim(`Model unloaded from memory.`));
+          this.ui.write(chalk.dim(`Model \${this.modelPath?.split('/').pop()} unloaded from memory.`));
       }
   }
 
