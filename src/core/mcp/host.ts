@@ -66,6 +66,20 @@ export class McpHost {
         await client.connect(transport);
         this.clients.set(name, client);
 
+        // --- NEW: Capture and redirect stderr ---
+        // StdioClientTransport has a 'process' property once connected
+        const serverProcess = (transport as any).process;
+        if (serverProcess && serverProcess.stderr) {
+            serverProcess.stderr.on("data", (data: Buffer) => {
+                const lines = data.toString().split("\n");
+                for (const line of lines) {
+                    if (line.trim()) {
+                        this.ui.write(chalk.dim(`[${name}] ${line.trim()}`));
+                    }
+                }
+            });
+        }
+
         const response = await client.listTools();
         for (const tool of response.tools) {
           const mcpTool: McpTool = {
