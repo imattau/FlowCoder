@@ -37,7 +37,6 @@ export function createCli() {
     .command("init [name]")
     .description("Initialize FlowCoder environment and download models")
     .action(async (name?: string) => {
-        // Initializing from outside chat - use console.log
         await projectInitializer.initializeProject(name);
     });
 
@@ -47,7 +46,6 @@ export function createCli() {
     .action((description) => {
       const id = Date.now().toString();
       const task = stateManager.createTask(id, description);
-      // If outside chat, this will fail or misbehave if UI is not started
       console.log(chalk.blue(`\n🚀 Task started: ${chalk.bold(task.description)} (ID: ${task.id})`));
     });
 
@@ -61,7 +59,6 @@ export function createCli() {
 
       if (!modelPath) {
         if (!(await modelManager.isModelDownloaded())) {
-            // Note: This happens BEFORE ui is fully initialized/rendered often
             console.log(chalk.yellow("Default model not found. Downloading..."));
             modelPath = await modelManager.downloadDefaultModel();
         } else {
@@ -185,7 +182,7 @@ export function createCli() {
           ui.drawPrompt(chalk.bold.magenta("flowcoder> "));
         });
 
-        ui.screen.key(["escape"], (ch, key) => {
+        ui.screen.key(["escape"], (ch: string, key: any) => {
             if (aiTurnInProgress) {
                 chatLoop.isInterrupted = true;
                 ui.write(chalk.red("\nAI turn interrupted by user. Returning control...\n"));
@@ -193,7 +190,7 @@ export function createCli() {
             }
         });
 
-        ui.screen.key(["C-c"], async (ch, key) => {
+        ui.screen.key(["C-c"], async (ch: string, key: any) => {
             ui.screen.destroy();
             await chatLoop.cleanup();
             process.exit(0);
