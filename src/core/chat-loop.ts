@@ -9,7 +9,7 @@ import { McpHost } from "./mcp/host.js";
 import { execSync } from "child_process";
 import { discoverProjectCommands, type ProjectCommands } from "./discovery.js";
 import { TerminalManager } from "./ui/terminal-manager.js";
-import { calculateCodeMetrics } from "./utils/code-metrics.js";
+import { calculateCodeMetrics } from "./utils/code-metrics.js"; // <-- Added this import
 import ora from "ora";
 import chalk from "chalk";
 import readline from "readline";

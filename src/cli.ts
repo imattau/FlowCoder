@@ -33,10 +33,20 @@ export function createCli() {
     .version(pkg.version);
 
   program
-    .command("init [name]")
+    .command("init")
     .description("Initialize FlowCoder environment and download models")
-    .action(async (name?: string) => {
-        await projectInitializer.initializeProject(name);
+    .action(async () => {
+      const spinner = ora(chalk.cyan("Initializing FlowCoder...")).start();
+      try {
+        spinner.text = chalk.cyan("Downloading default model (1.5B)...");
+        await modelManager.downloadDefaultModel();
+        spinner.text = chalk.cyan("Downloading tiny model (0.5B)...");
+        await modelManager.downloadTinyModel();
+        spinner.succeed(chalk.green("Environment ready."));
+      } catch (err: any) {
+        spinner.fail(chalk.red(`Failed to initialize: ${err.message}`));
+        process.exit(1);
+      }
     });
 
   program
@@ -95,9 +105,11 @@ export function createCli() {
           prompt: chalk.bold.magenta("flowcoder> "),
         });
 
-        rl.prompt();
-
         rl.on("line", async (line) => {
+          // Clear current prompt line before writing anything else
+          tm.moveCursor(1, tm.promptRow);
+          readline.clearLine(process.stdout, 0);
+
           const input = line.trim();
           
           if (!input) {
@@ -159,6 +171,8 @@ export function createCli() {
                   default:
                       tm.write(`\n${chalk.red("Unknown command: /${cmd}")}\n`);
               }
+              // After processing a command, re-render to ensure prompt is correct
+              tm.render();
               rl.prompt();
               return;
           }
@@ -173,6 +187,7 @@ export function createCli() {
                       tm.write(`\n${chalk.red(`Command failed: ${e.message}`)}\n`);
                   }
               }
+              tm.render();
               rl.prompt();
               return;
           }
@@ -182,7 +197,7 @@ export function createCli() {
           } catch (err: any) {
             tm.write(`\n${chalk.red(`Error during chat: ${err.message}`)}\n`);
           }
-          
+          tm.render(); // Ensure render after AI turn
           rl.prompt();
         }).on("close", async () => {
           await chatLoop.cleanup();
