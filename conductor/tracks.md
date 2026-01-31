@@ -17,6 +17,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 - [Command Queuing](./tracks/command-queuing/index.md) - Batch execution and multi-tool turns.
 - [Specialized Coder Agents](./tracks/specialized-coders/index.md) - Decomposing the coder into task-specific mini-agents.
 - [File-Based Handovers](./tracks/file-handovers/index.md) - Using disk-based state to reduce context size and improve agent communication.
+- [Decomposed Planner Pipeline](./tracks/decomposed-planner/index.md) - Splitting the planner into intent, context, and dispatcher agents.
 
 
 

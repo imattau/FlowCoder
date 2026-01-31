@@ -4,7 +4,7 @@ import { tools } from "./tools.js";
 import { StateManager } from "./state.js";
 import { CommandGuard } from "./command-guard.js";
 import { AgentFactory, type AgentType } from "./agents/factory.js";
-import { PlannerAgent, DebugAgent } from "./agents/base.js";
+import { IntentAgent, ContextAgent, DispatcherAgent, DebugAgent } from "./agents/base.js";
 import { McpHost } from "./mcp/host.js";
 import { execSync } from "child_process";
 import { discoverProjectCommands, type ProjectCommands } from "./discovery.js";
@@ -97,32 +97,46 @@ export class ChatLoop {
     while (turnCount < maxTurns) {
       turnCount++;
       
-      const spinner = ora({
-          text: chalk.dim("Thinking..."),
-          discardStdin: false
-      }).start();
+      // 1. INTENT ANALYSIS
+      const intentSpinner = ora(chalk.dim("Analyzing intent...")).start();
+      const intentAgent = this.agents.getAgent<IntentAgent>("intent");
+      const intent = await intentAgent.run(input);
+      intentSpinner.stop();
+      console.log(chalk.dim(`Intent: ${intent}`));
 
-      const planner = this.agents.getAgent<PlannerAgent>("planner");
-      const plannerResponse = await planner.run(input, this.history.map(h => `${h.role}: ${h.content}`));
+      // 2. CONTEXT GATHERING
+      const contextSpinner = ora(chalk.dim("Gathering context...")).start();
+      const contextAgent = this.agents.getAgent<ContextAgent>("context");
+      const contextResults = await contextAgent.run(input, intent);
+      contextSpinner.stop();
+      // Handle tool calls from ContextAgent if it chooses to search/read
+      const contextTools = PromptManager.parseToolCalls(contextResults);
+      for (const call of contextTools) {
+          const res = await (tools[call.name] as any).execute(call.parameters);
+          this.history.push({ role: "system", content: PromptManager.formatToolResult(res) });
+      }
+
+      // 3. DISPATCH & PLAN
+      const dispatchSpinner = ora(chalk.dim("Planning execution...")).start();
+      const dispatcher = this.agents.getAgent<DispatcherAgent>("dispatcher");
+      const dispatchResponse = await dispatcher.run(input, this.history.map(h => `${h.role}: ${h.content}`));
+      dispatchSpinner.stop();
+
+      this.stateManager.writeScratchpad(dispatchResponse);
+
+      let finalTurnResponse = dispatchResponse;
       
-      spinner.stop();
-
-      // DISK-BASED HANDOVER: Write planner intent to scratchpad
-      this.stateManager.writeScratchpad(plannerResponse);
-
-      let finalTurnResponse = plannerResponse;
-      
-      if (plannerResponse.includes("PatchAgent")) {
+      if (dispatchResponse.includes("PatchAgent")) {
           const patchSpinner = ora(chalk.cyan("Delegating to PatchAgent (Sniper)...")).start();
           const patcher = this.agents.getAgent<any>("patcher");
           finalTurnResponse = await patcher.run("Context updated in scratchpad.");
           patchSpinner.stop();
-      } else if (plannerResponse.includes("BoilerplateAgent")) {
+      } else if (dispatchResponse.includes("BoilerplateAgent")) {
           const buildSpinner = ora(chalk.cyan("Delegating to BoilerplateAgent (Builder)...")).start();
           const builder = this.agents.getAgent<any>("boilerplate");
           finalTurnResponse = await builder.run("Context updated in scratchpad.");
           buildSpinner.stop();
-      } else if (plannerResponse.includes("TemplateAgent")) {
+      } else if (dispatchResponse.includes("TemplateAgent")) {
           const weaverSpinner = ora(chalk.cyan("Delegating to TemplateAgent (Weaver)...")).start();
           const weaver = this.agents.getAgent<any>("template");
           finalTurnResponse = await weaver.run("Context updated in scratchpad.");
@@ -191,13 +205,9 @@ export class ChatLoop {
                     verifySpinner.succeed(chalk.green("OK."));
                   } else {
                     verifySpinner.fail(chalk.red("Fail."));
-                    
                     const debuggerAgent = this.agents.getAgent<DebugAgent>("debugger");
                     const analysis = await debuggerAgent.run(verification.output);
-                    
-                    // Save debugger analysis to scratchpad for the next coder attempt
                     this.stateManager.writeScratchpad(analysis);
-                    
                     console.log(chalk.magenta.bold("\n🔍 Debugger: ") + analysis);
                     this.history.push({ role: "system", content: `Debugger: ${analysis}` });
                     this.commandQueue = [];

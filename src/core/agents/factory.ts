@@ -1,6 +1,8 @@
 import { InferenceEngine } from "../inference.js";
 import { 
-    PlannerAgent, 
+    IntentAgent,
+    ContextAgent,
+    DispatcherAgent, 
     PatchAgent, 
     BoilerplateAgent, 
     TemplateAgent, 
@@ -8,7 +10,7 @@ import {
     DebugAgent 
 } from "./base.js";
 
-export type AgentType = "planner" | "patcher" | "boilerplate" | "template" | "refactor" | "debugger";
+export type AgentType = "intent" | "context" | "dispatcher" | "patcher" | "boilerplate" | "template" | "refactor" | "debugger";
 
 export class AgentFactory {
   private agents: Map<AgentType, any> = new Map();
@@ -17,10 +19,13 @@ export class AgentFactory {
     const defaultEng = (engineMap["planner"] || engineMap["default"])!;
     const tinyEng = (engineMap["tiny"] || engineMap["default"])!;
 
-    this.agents.set("planner", new PlannerAgent(defaultEng));
-    this.agents.set("patcher", new PatchAgent(tinyEng)); // Sniper runs on tiny model
+    this.agents.set("intent", new IntentAgent(tinyEng));
+    this.agents.set("context", new ContextAgent(tinyEng));
+    this.agents.set("dispatcher", new DispatcherAgent(defaultEng));
+    
+    this.agents.set("patcher", new PatchAgent(tinyEng));
     this.agents.set("boilerplate", new BoilerplateAgent(defaultEng));
-    this.agents.set("template", new TemplateAgent(tinyEng)); // Weaver runs on tiny model
+    this.agents.set("template", new TemplateAgent(tinyEng));
     this.agents.set("refactor", new RefactorAgent(defaultEng));
     this.agents.set("debugger", new DebugAgent(tinyEng));
   }
