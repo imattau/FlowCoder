@@ -9,6 +9,7 @@ import { McpHost } from "./mcp/host.js";
 import { execSync } from "child_process";
 import { discoverProjectCommands, type ProjectCommands } from "./discovery.js";
 import { TerminalManager } from "./ui/terminal-manager.js";
+import { calculateCodeMetrics } from "./utils/code-metrics.js";
 import ora from "ora";
 import chalk from "chalk";
 import readline from "readline";
@@ -77,7 +78,7 @@ export class ChatLoop {
 
       const rl = readline.createInterface({
           input: process.stdin,
-          output: process.stdout
+          output: process.stdout 
       });
 
       return new Promise((res) => {
@@ -243,8 +244,12 @@ export class ChatLoop {
                     verifySpinner.succeed(chalk.green("OK."));
                   } else {
                     verifySpinner.fail(chalk.red("Fail."));
+                    
+                    const codeMetrics = calculateCodeMetrics(process.cwd());
+                    const metricsReport = `\n--- Code Metrics Report ---\nTotal Lines: ${codeMetrics.totalLines}\nLargest Files (lines):\n${codeMetrics.fileMetrics.sort((a,b) => b.lines - a.lines).slice(0, 5).map(m => `  - ${m.file}: ${m.lines}`).join('\n')}\n--- End Report ---\n`;
+                    
                     const debuggerAgent = this.agents.getAgent<DebugAgent>("debugger");
-                    const analysis = await debuggerAgent.run(verification.output);
+                    const analysis = await debuggerAgent.run(verification.output + metricsReport);
                     this.stateManager.writeScratchpad(analysis);
                     this.tm.write(chalk.magenta.bold("\n🔍 Debugger: ") + analysis + "\n");
                     this.history.push({ role: "system", content: `Debugger: ${analysis}` });
