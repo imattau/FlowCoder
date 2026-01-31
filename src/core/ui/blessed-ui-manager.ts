@@ -16,7 +16,8 @@ export class BlessedUIManager {
       fullUnicode: true,
       dockBorders: true,
       autoNextFocus: true,
-      terminal: 'xterm-256color' // Target standard color support
+      // Setting transparency and omitting default colors allows system theme inheritance
+      transparent: true 
     });
 
     this.outputBox = blessed.log({
@@ -33,8 +34,7 @@ export class BlessedUIManager {
         style: { bg: "cyan" }
       } as any,
       style: {
-        fg: "white",
-        bg: "black"
+        // Omitting fg and bg to use terminal defaults
       },
       border: {
         type: "line",
@@ -50,9 +50,6 @@ export class BlessedUIManager {
         left: 0,
         width: "100%",
         height: 3,
-        style: {
-            bg: "black"
-        },
         border: { type: "line", fg: "magenta" }
     });
 
@@ -63,10 +60,6 @@ export class BlessedUIManager {
         height: 1,
         width: "shrink",
         tags: true,
-        style: {
-            bg: "black",
-            fg: "magenta"
-        },
         content: ""
     });
 
@@ -79,20 +72,13 @@ export class BlessedUIManager {
       keys: true,
       mouse: false,
       inputOnFocus: true,
-      // Ensure the cursor is visible in GNOME Terminal
       cursor: {
           artificial: true,
           shape: 'block',
-          blink: true,
-          color: 'white'
+          blink: true
       },
       style: {
-        fg: "white", 
-        bg: "black",
-        focus: {
-            fg: "white",
-            bg: "black"
-        }
+          // Inherit system colors
       }
     });
 
@@ -104,8 +90,8 @@ export class BlessedUIManager {
       height: 1,
       tags: true,
       style: {
-        fg: "white",
-        bg: "gray"
+        // Use inverse to make it stand out regardless of theme
+        inverse: true 
       },
       content: "Initializing..."
     });
@@ -153,6 +139,8 @@ export class BlessedUIManager {
     this.promptLabel.setContent(promptText);
     this.inputTextBox.left = cleanPrompt.length;
     this.inputTextBox.width = `100%-\${cleanPrompt.length + 2}`;
+    
+    this.promptLabel.style.fg = "magenta";
     
     this.inputTextBox.focus();
     this.inputTextBox.readInput(); 
