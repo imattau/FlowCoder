@@ -27,15 +27,36 @@ export class StateManager {
     this.cwd = cwd;
     this.dotFolder = join(cwd, ".flowcoder");
     this.globalState = new GlobalStateManager();
+    this.ensureFlowCoderDir();
     this.ensureStructure();
+    
+    const projectJsonPath = join(this.dotFolder, "project.json");
+    if (!existsSync(projectJsonPath)) {
+        this.saveProject({
+            name: this.cwd.split('/').pop() || "my-flowcoder-project",
+            goals: ["Be a helpful AI assistant for this project."],
+            conventions: ["Adhere to existing code style."]
+        });
+    }
+  }
+
+  private ensureFlowCoderDir() {
+    if (!existsSync(this.dotFolder)) {
+      mkdirSync(this.dotFolder, { recursive: true });
+    }
   }
 
   private ensureStructure() {
-    if (!existsSync(this.dotFolder)) return; 
     const tasksDir = join(this.dotFolder, "tasks");
     if (!existsSync(tasksDir)) mkdirSync(tasksDir);
     const contextDir = join(this.dotFolder, "context");
     if (!existsSync(contextDir)) mkdirSync(contextDir);
+
+    const decisions = join(this.dotFolder, "decisions.md");
+    if (!existsSync(decisions)) writeFileSync(decisions, "# Architectural Decisions\n\n");
+
+    const refs = join(this.dotFolder, "references.md");
+    if (!existsSync(refs)) writeFileSync(refs, "# References\n\n");
   }
 
   getProjectSummary(): string {
@@ -53,12 +74,10 @@ export class StateManager {
         summary += "\nDISCOVERED EXTERNAL CONTEXT:\n";
         for (const ctx of external) {
             summary += `### From ${ctx.source}:\n${ctx.content}\n`;
-            // AUTO-INDEX: Add to local references if not already there
             this.addReference(`External context found in ${ctx.source}`);
         }
     }
 
-    // GROUNDING AUDIT
     const deps = scanDependencies(this.cwd);
     if (deps.length > 0) {
         const audit = this.globalState.getAuditReport(deps);
@@ -98,7 +117,7 @@ export class StateManager {
   }
 
   writeScratchpad(content: string) {
-    if (!existsSync(this.dotFolder)) mkdirSync(this.dotFolder, { recursive: true });
+    this.ensureFlowCoderDir();
     this.ensureStructure();
     writeFileSync(join(this.dotFolder, "context", "scratchpad.md"), content);
   }
@@ -110,7 +129,7 @@ export class StateManager {
   }
 
   saveProject(state: ProjectState) {
-    if (!existsSync(this.dotFolder)) mkdirSync(this.dotFolder, { recursive: true });
+    this.ensureFlowCoderDir();
     writeFileSync(join(this.dotFolder, "project.json"), JSON.stringify(state, null, 2));
   }
 
@@ -133,23 +152,22 @@ export class StateManager {
   }
 
   saveTask(task: TaskState) {
-    if (!existsSync(this.dotFolder)) mkdirSync(this.dotFolder, { recursive: true });
+    this.ensureFlowCoderDir();
     this.ensureStructure();
     writeFileSync(join(this.dotFolder, "tasks", `task-${task.id}.json`), JSON.stringify(task, null, 2));
   }
 
   logDecision(decision: string) {
-    if (!existsSync(this.dotFolder)) mkdirSync(this.dotFolder, { recursive: true });
+    this.ensureFlowCoderDir();
     const path = join(this.dotFolder, "decisions.md");
     const timestamp = new Date().toISOString();
     appendFileSync(path, `\n## ${timestamp}\n${decision}\n`);
   }
 
   addReference(ref: string) {
-    if (!existsSync(this.dotFolder)) mkdirSync(this.dotFolder, { recursive: true });
+    this.ensureFlowCoderDir();
     const path = join(this.dotFolder, "references.md");
     
-    // Simple deduplication
     let current = "";
     if (existsSync(path)) current = readFileSync(path, "utf-8");
     if (!current.includes(ref)) {

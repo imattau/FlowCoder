@@ -9,6 +9,7 @@ import { InferenceEngine } from "./core/inference.js";
 import { ChatLoop } from "./core/chat-loop.js";
 import { StateManager } from "./core/state.js";
 import { TerminalManager } from "./core/ui/terminal-manager.js";
+import { ProjectInitializer } from "./core/project-initializer.js";
 import { LlamaLogLevel } from "node-llama-cpp";
 import { execSync } from "child_process";
 import readline from "readline";
@@ -24,6 +25,7 @@ export function createCli() {
   const modelManager = new ModelManager(currentConfig.MODELS_DIR);
   const stateManager = new StateManager();
   const tm = TerminalManager.getInstance();
+  const projectInitializer = new ProjectInitializer();
 
   program
     .name("flowcoder")
@@ -31,20 +33,10 @@ export function createCli() {
     .version(pkg.version);
 
   program
-    .command("init")
+    .command("init [name]")
     .description("Initialize FlowCoder environment and download models")
-    .action(async () => {
-      const spinner = ora(chalk.cyan("Initializing FlowCoder...")).start();
-      try {
-        spinner.text = chalk.cyan("Downloading default model (1.5B)...");
-        await modelManager.downloadDefaultModel();
-        spinner.text = chalk.cyan("Downloading tiny model (0.5B)...");
-        await modelManager.downloadTinyModel();
-        spinner.succeed(chalk.green("Environment ready."));
-      } catch (err: any) {
-        spinner.fail(chalk.red(`Failed to initialize: ${err.message}`));
-        process.exit(1);
-      }
+    .action(async (name?: string) => {
+        await projectInitializer.initializeProject(name);
     });
 
   program
@@ -127,13 +119,32 @@ export function createCli() {
                       tm.write(`\n${chalk.bold("Available Commands:")}`);
                       tm.write(`\n${chalk.cyan(" /help")}          Show this help`);
                       tm.write(`\n${chalk.cyan(" /config")}        Show current configuration`);
-                      tm.write(`\n${chalk.cyan(" /task <desc>")}  Start a new task`);
+                      tm.write(`\n${chalk.cyan(" /init [name]")}   Initialize .flowcoder setup for the current project`);
+                      tm.write(`\n${chalk.cyan(" /task <desc>")})  Start a new task`);
                       tm.write(`\n${chalk.cyan(" /clear")}         Clear chat history`);
-                      tm.write(`\n${chalk.cyan(" ! <cmd>")}       Execute shell command directly\n`);
+                      tm.write(`\n${chalk.cyan(" ! <cmd>")})       Execute shell command directly\n`);
                       break;
                   case "config":
                       tm.write(`\n${chalk.bold("🛠️  FlowCoder Configuration (Merged):")}`);
-                      tm.write(`\n${chalk.dim(JSON.stringify(currentConfig, null, 2))}`);
+                      tm.write(`\n${chalk.dim(JSON.stringify({
+                        FLOWCODER_DIR: currentConfig.FLOWCODER_DIR,
+                        MODELS_DIR: currentConfig.MODELS_DIR,
+                        TASKS_DIR: currentConfig.TASKS_DIR,
+                        GLOBAL_REFS_DIR: currentConfig.GLOBAL_REFS_DIR,
+                        DEFAULT_MODEL_REPO: currentConfig.DEFAULT_MODEL_REPO,
+                        DEFAULT_MODEL_FILE: currentConfig.DEFAULT_MODEL_FILE,
+                        TINY_MODEL_REPO: currentConfig.TINY_MODEL_REPO,
+                        TINY_MODEL_FILE: currentConfig.TINY_MODEL_FILE,
+                        DEFAULT_CONTEXT_SIZE: currentConfig.DEFAULT_CONTEXT_SIZE,
+                        MCP_CONFIG: {
+                            enable_defaults: currentConfig.MCP_CONFIG.enable_defaults,
+                            defaults: currentConfig.MCP_CONFIG.defaults,
+                            custom_servers: currentConfig.MCP_CONFIG.custom_servers
+                        }
+                      }, null, 2))}\n`);
+                      break;
+                  case "init":
+                      await projectInitializer.initializeProject(args.join(" ") || undefined);
                       break;
                   case "task":
                       const id = Date.now().toString();
@@ -146,7 +157,7 @@ export function createCli() {
                       tm.write(`\n${chalk.yellow("🧹 History cleared.")}\n`);
                       break;
                   default:
-                      tm.write(`\n${chalk.red(`Unknown command: /${cmd}`)}\n`);
+                      tm.write(`\n${chalk.red("Unknown command: /${cmd}")}\n`);
               }
               rl.prompt();
               return;
