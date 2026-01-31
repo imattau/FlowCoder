@@ -17,7 +17,7 @@ export class BlessedUIManager {
       mouse: false
     });
 
-    this.outputBox = blessed.log({
+    this.outputBox = (blessed as any).log({
       parent: this.screen,
       top: 0,
       left: 0,
@@ -29,7 +29,7 @@ export class BlessedUIManager {
       scrollbar: {
         ch: " ",
         style: { bg: "cyan" }
-      } as any,
+      },
       style: {
         fg: "white",
         bg: "black"
@@ -37,8 +37,10 @@ export class BlessedUIManager {
       border: {
         type: "line",
         fg: "cyan"
-      }
-    } as any);
+      },
+      // Ensure text starts from the bottom
+      valign: "bottom"
+    });
 
     // Bounded input area (the container)
     const inputContainer = (blessed as any).box({
@@ -101,6 +103,8 @@ export class BlessedUIManager {
 
   write(text: string) {
     this.outputBox.log(text);
+    // Explicitly scroll to bottom after logging to ensure correct flow
+    this.outputBox.setScrollPerc(100);
     this.screen.render();
   }
 
