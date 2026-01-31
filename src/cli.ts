@@ -51,7 +51,8 @@ export function createCli() {
     .action((description) => {
       const id = Date.now().toString();
       const task = stateManager.createTask(id, description);
-      console.log(chalk.blue(`\n🚀 Task started: ${chalk.bold(task.description)} (ID: ${task.id})`));
+      console.log(chalk.blue(`
+🚀 Task started: ${chalk.bold(task.description)} (ID: ${task.id})`));
     });
 
   program
@@ -78,11 +79,6 @@ export function createCli() {
           spinner.succeed();
       }
 
-      const spinner = ora({
-        text: chalk.cyan("Loading AI Models..."),
-        discardStdin: false
-      }).start();
-
       try {
         const engine = new InferenceEngine();
         await engine.init(modelPath);
@@ -91,10 +87,11 @@ export function createCli() {
         await tinyEngine.init(tinyModelPath);
 
         const chatLoop = new ChatLoop(engine, tinyEngine);
+        // McpHost init and model loading spinners will be handled sequentially now
         await chatLoop.init();
 
-        spinner.succeed(chalk.green("FlowCoder ready. Type '/help' for internal commands or 'exit' to quit."));
-        console.log(chalk.dim("------------------------------------------"));
+        console.log(chalk.green("\n✨ FlowCoder ready. Type '/help' for internal commands or 'exit' to quit."));
+        console.log(chalk.dim("----------------------------------------------------------------------"));
 
         const rl = readline.createInterface({
           input: process.stdin,
@@ -106,20 +103,9 @@ export function createCli() {
 
         rl.on("line", async (line) => {
           const input = line.trim();
-          
-          if (!input) {
-              rl.prompt();
-              return;
-          }
+          if (!input) { rl.prompt(); return; }
+          if (input.toLowerCase() === "exit" || input.toLowerCase() === "quit") { rl.close(); return; }
 
-          if (input.toLowerCase() === "exit" || input.toLowerCase() === "quit") {
-            rl.close();
-            return;
-          }
-
-          // --- Command Interception ---
-          
-          // 1. Slash Commands (Internal)
           if (input.startsWith("/")) {
               const [cmd, ...args] = input.slice(1).split(" ");
               switch (cmd) {
@@ -143,37 +129,29 @@ export function createCli() {
                       break;
                   case "clear":
                       console.log(chalk.yellow("\n🧹 History cleared."));
-                      // Note: We'd need to add a clearHistory method to ChatLoop
                       break;
                   default:
-                      console.log(chalk.red(`Unknown command: ${cmd}`));
+                      console.log(chalk.red(`Unknown command: /${cmd}`));
               }
               rl.prompt();
               return;
           }
 
-          // 2. Bang Commands (External Shell)
           if (input.startsWith("!")) {
               const cmd = input.slice(1).trim();
               if (cmd) {
                   console.log(chalk.yellow(`\nExecuting: ${cmd}`));
-                  try {
-                      const out = execSync(cmd, { stdio: "inherit" });
-                  } catch (e: any) {
-                      console.error(chalk.red(`\nCommand failed: ${e.message}`));
-                  }
+                  try { execSync(cmd, { stdio: "inherit" }); } catch (e: any) { console.error(chalk.red(`\nCommand failed: ${e.message}`)); }
               }
               rl.prompt();
               return;
           }
 
-          // 3. Normal AI Interaction
           try {
             await chatLoop.processInput(input);
           } catch (err: any) {
             console.error(chalk.red(`\nError during chat: ${err.message}`));
           }
-          
           rl.prompt();
         }).on("close", async () => {
           await chatLoop.cleanup();
@@ -181,7 +159,7 @@ export function createCli() {
           process.exit(0);
         });
       } catch (err: any) {
-        spinner.fail(chalk.red(`Failed to load models: ${err.message}`));
+        console.error(chalk.red(`\nFailed to initialize chat: ${err.message}`));
         process.exit(1);
       }
     });
@@ -190,7 +168,6 @@ export function createCli() {
     .command("config")
     .description("View current configuration")
     .action(() => {
-        // reuse the logic or move to a helper
         console.log(chalk.bold("\n🛠️  FlowCoder Configuration:"));
         console.log(chalk.dim(JSON.stringify(CONFIG, null, 2)));
     });

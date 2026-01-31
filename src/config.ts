@@ -31,7 +31,7 @@ export const CONFIG = {
         args: ["-y", "@modelcontextprotocol/server-filesystem", process.cwd()] 
       },
       "fetch": {
-        enabled: true,
+        enabled: false, // Disabling due to 404, we have internal fetch_url
         command: "npx",
         args: ["-y", "@modelcontextprotocol/server-fetch"]
       }
