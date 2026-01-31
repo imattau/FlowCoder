@@ -38,9 +38,11 @@ export class ChatLoop {
 
   async init() {
       await this.mcp.init();
+      
+      const summary = this.stateManager.getProjectSummary();
       this.history.push({
           role: "system", 
-          content: PromptManager.getSystemPrompt(this.mcp.getTools()) 
+          content: `You are resuming work on a project. \${summary}\n\${PromptManager.getSystemPrompt(this.mcp.getTools())}` 
       });
   }
 

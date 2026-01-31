@@ -26,7 +26,8 @@ export class ContextAgent extends BaseAgent {
 
 export class DispatcherAgent extends BaseAgent {
   private static PROMPT = "You are the Lead Dispatcher. Based on the gathered context, write a detailed Execution Plan to '.flowcoder/context/scratchpad.md'.\n" +
-"Then, delegate to the correct Coder agent by mentioning its name: [PatchAgent, BoilerplateAgent, TemplateAgent, RefactorAgent].";
+"Then, delegate to the correct Coder agent by mentioning its name: [PatchAgent, BoilerplateAgent, TemplateAgent, RefactorAgent].\n" +
+"RESUMPTION RULE: If you detect a previous task or goals in the context, start by summarizing where you are and proposing the immediate next step.";
 
   async run(input: string, history: string[] = []): Promise<string> {
     const fullPrompt = `${DispatcherAgent.PROMPT}\n\nHistory:\n${history.join("\n")}\n\nUser: ${input}\nAssistant:`;

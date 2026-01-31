@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { CONFIG } from "../config.js";
 
@@ -37,6 +37,44 @@ export class StateManager {
 
     const refs = join(this.dotFolder, "references.md");
     if (!existsSync(refs)) writeFileSync(refs, "# References\n\n");
+  }
+
+  getProjectSummary(): string {
+    let summary = "PROJECT CONTEXT:\n";
+    
+    const project = this.getProject();
+    if (project) {
+        summary += `- Name: ${project.name}\n`;
+        summary += `- Goals: ${project.goals.join(", ")}\n`;
+        summary += `- Conventions: ${project.conventions.join(", ")}\n`;
+    }
+
+    const activeTask = this.getLatestTask();
+    if (activeTask) {
+        summary += `\nLATEST TASK (${activeTask.status}):\n${activeTask.description}\n`;
+    }
+
+    const decisionsPath = join(this.dotFolder, "decisions.md");
+    if (existsSync(decisionsPath)) {
+        const decisions = readFileSync(decisionsPath, "utf-8");
+        const lines = decisions.split("\n").filter(l => l.trim()).slice(-5);
+        summary += `\nRECENT DECISIONS:\n${lines.join("\n")}\n`;
+    }
+
+    return summary;
+  }
+
+  private getLatestTask(): TaskState | null {
+    const tasksDir = join(this.dotFolder, "tasks");
+    const files = readdirSync(tasksDir).filter(f => f.endsWith(".json"));
+    if (files.length === 0) return null;
+
+    const latest = files
+        .map(f => ({ name: f, time: statSync(join(tasksDir, f)).mtime.getTime() }))
+        .sort((a, b) => b.time - a.time)[0];
+
+    if (!latest) return null;
+    return JSON.parse(readFileSync(join(tasksDir, latest.name), "utf-8"));
   }
 
   writeScratchpad(content: string) {
