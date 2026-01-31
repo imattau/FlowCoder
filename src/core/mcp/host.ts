@@ -2,6 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { CONFIG } from "../../config.js";
 import { BlessedUIManager } from "../ui/blessed-ui-manager.js";
+import { Writable } from "stream";
 import chalk from "chalk";
 
 export interface McpTool {
@@ -50,17 +51,26 @@ export class McpHost {
             }
         }
 
+        // --- FIXED: Use a custom Writable stream for stderr to capture everything ---
+        const stderrInterceptor = new Writable({
+            write: (chunk, encoding, callback) => {
+                const lines = chunk.toString().split("\n");
+                for (const line of lines) {
+                    if (line.trim()) {
+                        this.ui.write(chalk.dim(`[${name}] ${line.trim()}`));
+                    }
+                }
+                callback();
+            }
+        });
+
         const transport = new StdioClientTransport({
           command: config.command,
           args: config.args,
-          env: env
+          env: env,
+          stderr: stderrInterceptor as any // Route stderr to our interceptor
         });
 
-        // --- NEW: Attach stderr listener BEFORE connect ---
-        // StdioClientTransport has a 'process' property once created (but not yet spawned until connect)
-        // Actually, the SDK spawns in connect(). But we can try to access the process earlier if possible,
-        // or ensure we attach as soon as it's available.
-        
         const client = new Client({
           name: "FlowCoder-Host",
           version: "1.0.0"
@@ -68,23 +78,7 @@ export class McpHost {
           capabilities: {}
         });
 
-        // Attach listener immediately after connect call starts
-        const connectPromise = client.connect(transport);
-        
-        // At this point transport.process should be available
-        const serverProcess = (transport as any).process;
-        if (serverProcess && serverProcess.stderr) {
-            serverProcess.stderr.on("data", (data: Buffer) => {
-                const lines = data.toString().split("\n");
-                for (const line of lines) {
-                    if (line.trim()) {
-                        this.ui.write(chalk.dim(`[${name}] ${line.trim()}`));
-                    }
-                }
-            });
-        }
-
-        await connectPromise;
+        await client.connect(transport);
         this.clients.set(name, client);
 
         const response = await client.listTools();
