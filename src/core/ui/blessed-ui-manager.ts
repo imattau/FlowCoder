@@ -7,17 +7,19 @@ export class BlessedUIManager {
   public inputTextBox: blessed.Widgets.TextboxElement;
   public statusBar: blessed.Widgets.BoxElement;
   private promptLabel: blessed.Widgets.BoxElement;
+  private inputContainer: blessed.Widgets.BoxElement;
 
   private constructor() {
     this.screen = blessed.screen({
       smartCSR: true,
       title: "FlowCoder",
-      sendFocus: true,
+      fullUnicode: true,
       dockBorders: true,
-      mouse: false
+      // Focus the input box by default
+      autoNextFocus: true
     });
 
-    this.outputBox = (blessed as any).log({
+    this.outputBox = blessed.log({
       parent: this.screen,
       top: 0,
       left: 0,
@@ -29,7 +31,7 @@ export class BlessedUIManager {
       scrollbar: {
         ch: " ",
         style: { bg: "cyan" }
-      },
+      } as any,
       style: {
         fg: "white",
         bg: "black"
@@ -38,12 +40,11 @@ export class BlessedUIManager {
         type: "line",
         fg: "cyan"
       },
-      // Ensure text starts from the bottom
       valign: "bottom"
-    });
+    } as any);
 
     // Bounded input area (the container)
-    const inputContainer = (blessed as any).box({
+    this.inputContainer = (blessed as any).box({
         parent: this.screen,
         bottom: 1,
         left: 0,
@@ -53,7 +54,7 @@ export class BlessedUIManager {
     });
 
     this.promptLabel = (blessed as any).box({
-        parent: inputContainer,
+        parent: this.inputContainer,
         top: 0,
         left: 0,
         height: 1,
@@ -63,17 +64,20 @@ export class BlessedUIManager {
     });
 
     this.inputTextBox = (blessed as any).textbox({
-      parent: inputContainer,
+      parent: this.inputContainer,
       top: 0,
-      left: 0, // Will be dynamically adjusted
+      left: 12, // Default offset for "flowcoder> "
       height: 1,
-      width: "100%-2",
-      inputOnFocus: true,
+      width: "100%-14",
       keys: true,
       mouse: false,
+      inputOnFocus: true,
       style: {
         fg: "white",
-        bg: "black"
+        bg: "black",
+        focus: {
+            fg: "white"
+        }
       }
     });
 
@@ -91,6 +95,11 @@ export class BlessedUIManager {
       content: "Initializing..."
     });
 
+    // Handle Resize
+    this.screen.on("resize", () => {
+        this.screen.render();
+    });
+
     this.screen.render();
   }
 
@@ -101,9 +110,10 @@ export class BlessedUIManager {
     return BlessedUIManager.instance;
   }
 
+  // Convert ANSI (Chalk) to Blessed tags if necessary, or just strip
+  // Blessed log widget actually supports ANSI codes if tags is true or if handled correctly
   write(text: string) {
     this.outputBox.log(text);
-    // Explicitly scroll to bottom after logging to ensure correct flow
     this.outputBox.setScrollPerc(100);
     this.screen.render();
   }
@@ -113,28 +123,30 @@ export class BlessedUIManager {
     this.screen.render();
   }
 
+  // Set the prompt and prepare for input
   drawPrompt(promptText: string) {
-    this.promptLabel.setContent(promptText);
     const cleanPrompt = promptText.replace(/\x1b\[[0-9;]*m/g, "");
+    this.promptLabel.setContent(promptText);
     this.inputTextBox.left = cleanPrompt.length;
     this.inputTextBox.width = `100%-\${cleanPrompt.length + 2}`;
     
-    this.screen.render();
-    this.inputTextBox.readInput();
     this.inputTextBox.focus();
+    this.screen.render();
   }
 
+  // Prompts for a single input (used for confirmations/questions)
   async getInputPrompt(promptText: string): Promise<string> {
-    this.promptLabel.setContent(promptText);
-    const cleanPrompt = promptText.replace(/\x1b\[[0-9;]*m/g, "");
-    this.inputTextBox.left = cleanPrompt.length;
-    
-    this.screen.render();
-    this.inputTextBox.focus();
+    const oldPrompt = this.promptLabel.content;
+    const oldLeft = this.inputTextBox.left;
 
+    this.drawPrompt(promptText);
+    
     return new Promise((resolve) => {
-        this.inputTextBox.readInput((err, value) => {
+        this.inputTextBox.once("submit", (value: string) => {
             this.inputTextBox.clearValue();
+            // Restore old prompt state
+            this.drawPrompt(oldPrompt);
+            this.inputTextBox.left = oldLeft;
             resolve(value || "");
         });
     });
