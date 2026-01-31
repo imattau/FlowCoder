@@ -90,7 +90,7 @@ ${idx + 1}. ${chalk.cyan(cmd.name)}(${chalk.dim(JSON.stringify(cmd.parameters))}
 
       const rl = readline.createInterface({
           input: process.stdin,
-          output: process.stderr // Use process.stderr for readline input to avoid conflict with TM
+          output: process.stderr
       });
 
       return new Promise((res) => {
@@ -130,43 +130,28 @@ Your answer: `), (ans) => {
     while (turnCount < maxTurns && !this.isInterrupted) {
       turnCount++;
       
-      const intentSpinner = ora({
-          text: chalk.dim("Analyzing intent..."),
-          discardStdin: false,
-          stream: process.stderr
-      }).start();
-
+      this.tm.writeStatusBar(chalk.gray("Status: Analyzing intent..."));
       const intentAgent = this.agents.getAgent<IntentAgent>("intent");
       const intent = await intentAgent.run(input);
-      intentSpinner.stop();
       this.tm.write(chalk.dim(`Intent: ${intent}
 `));
       if (this.isInterrupted) throw new Error("User interrupted.");
 
-      const contextSpinner = ora({
-          text: chalk.dim("Gathering context..."),
-          discardStdin: false,
-          stream: process.stderr
-      }).start();
+      this.tm.writeStatusBar(chalk.gray("Status: Gathering context..."));
       const contextAgent = this.agents.getAgent<ContextAgent>("context");
       const contextResults = await contextAgent.run(input, intent);
-      contextSpinner.stop();
       if (this.isInterrupted) throw new Error("User interrupted.");
       const contextTools = PromptManager.parseToolCalls(contextResults);
       for (const call of contextTools) {
+          this.tm.writeStatusBar(chalk.gray(`Status: Executing context tool ${call.name}`));
           const res = await (tools[call.name] as any).execute(call.parameters);
           this.history.push({ role: "system", content: PromptManager.formatToolResult(res) });
           if (this.isInterrupted) throw new Error("User interrupted.");
       }
 
-      const dispatchSpinner = ora({
-          text: chalk.dim("Planning execution..."),
-          discardStdin: false,
-          stream: process.stderr
-      }).start();
+      this.tm.writeStatusBar(chalk.gray("Status: Planning execution..."));
       const dispatcher = this.agents.getAgent<DispatcherAgent>("dispatcher");
       const dispatchResponse = await dispatcher.run(input, this.history.map(h => `${h.role}: ${h.content}`));
-      dispatchSpinner.stop();
       if (this.isInterrupted) throw new Error("User interrupted.");
 
       this.stateManager.writeScratchpad(dispatchResponse);
@@ -175,20 +160,17 @@ Your answer: `), (ans) => {
 
       let finalTurnResponse = dispatchResponse;
       if (dispatchResponse.includes("PatchAgent")) {
-          const patchSpinner = ora(chalk.cyan("Delegating to PatchAgent (Sniper)...")).start();
+          this.tm.writeStatusBar(chalk.cyan("Status: Delegating to PatchAgent (Sniper)..."));
           const patcher = this.agents.getAgent<any>("patcher");
           finalTurnResponse = await patcher.run("Context updated in scratchpad.");
-          patchSpinner.stop();
       } else if (dispatchResponse.includes("BoilerplateAgent")) {
-          const buildSpinner = ora(chalk.cyan("Delegating to BoilerplateAgent (Builder)...")).start();
+          this.tm.writeStatusBar(chalk.cyan("Status: Delegating to BoilerplateAgent (Builder)..."));
           const builder = this.agents.getAgent<any>("boilerplate");
           finalTurnResponse = await builder.run("Context updated in scratchpad.");
-          buildSpinner.stop();
       } else if (dispatchResponse.includes("TemplateAgent")) {
-          const weaverSpinner = ora(chalk.cyan("Delegating to TemplateAgent (Weaver)...")).start();
+          this.tm.writeStatusBar(chalk.cyan("Status: Delegating to TemplateAgent (Weaver)..."));
           const weaver = this.agents.getAgent<any>("template");
           finalTurnResponse = await weaver.run("Context updated in scratchpad.");
-          weaverSpinner.stop();
       }
       if (this.isInterrupted) throw new Error("User interrupted.");
 
@@ -200,6 +182,7 @@ Your answer: `), (ans) => {
       }
 
       if (this.commandQueue.length > 0) {
+          this.tm.writeStatusBar(chalk.gray("Status: Awaiting user approval..."));
           const mode = await this.requestQueueApproval();
           if (mode === "abort") {
               this.tm.write(chalk.red("✖ Batch cancelled.\n"));
@@ -237,8 +220,7 @@ Your answer: `), (ans) => {
                   }
               }
 
-              const toolSpinner = ora(chalk.yellow(`Executing: ${chalk.bold(toolCall.name)}...`)).start();
-              
+              this.tm.writeStatusBar(chalk.yellow(`Status: Executing tool ${toolCall.name}...`));
               try {
                 let result: string;
                 if (tools[toolCall.name]) {
@@ -248,7 +230,7 @@ Your answer: `), (ans) => {
                 }
 
                 if (result.startsWith("PAUSE_FOR_USER:")) {
-                    toolSpinner.stop();
+                    this.tm.writeStatusBar(chalk.blue("Status: AI awaiting user input..."));
                     const question = result.replace("PAUSE_FOR_USER:", "").trim();
                     const answer = await this.askUserPrompt(question);
                     this.history.push({ role: "system", content: `User Answer: ${answer}` });
@@ -257,18 +239,24 @@ Your answer: `), (ans) => {
 
                 const formattedResult = PromptManager.formatToolResult(result);
                 this.history.push({ role: "system", content: formattedResult });
-                toolSpinner.succeed(chalk.green(`Done: ${toolCall.name}`));
+                this.tm.writeStatusBar(chalk.green(`Status: Tool ${toolCall.name} completed.`));
 
                 if (toolCall.name === "write_file" || toolCall.name === "patch_file") {
-                  const verifySpinner = ora(chalk.cyan("Verifying...")).start();
+                  this.tm.writeStatusBar(chalk.cyan("Status: Auto-Verifying Changes..."));
                   const verification = this.runVerification();
                   if (verification.success) {
-                    verifySpinner.succeed(chalk.green("OK."));
+                    this.tm.writeStatusBar(chalk.green("Status: Verification Passed."));
                   } else {
-                    verifySpinner.fail(chalk.red("Fail."));
+                    this.tm.writeStatusBar(chalk.red("Status: Verification Failed. Consulting Debugger..."));
                     
                     const codeMetrics = calculateCodeMetrics(process.cwd());
-                    const metricsReport = `\n--- Code Metrics Report ---\nTotal Lines: ${codeMetrics.totalLines}\nLargest Files (lines):\n${codeMetrics.fileMetrics.sort((a: any,b: any) => b.lines - a.lines).slice(0, 5).map((m: any) => `  - ${m.file}: ${m.lines}`).join('\n')}\n--- End Report ---\n`;
+                    const metricsReport = `
+--- Code Metrics Report ---
+Total Lines: ${codeMetrics.totalLines}
+Largest Files (lines):
+${codeMetrics.fileMetrics.sort((a: any,b: any) => b.lines - a.lines).slice(0, 5).map((m: any) => `  - ${m.file}: ${m.lines}`).join('\n')}
+--- End Report ---
+`;
                     
                     const debuggerAgent = this.agents.getAgent<DebugAgent>("debugger");
                     const analysis = await debuggerAgent.run(verification.output + metricsReport);
@@ -279,14 +267,16 @@ Your answer: `), (ans) => {
                   }
                 }
               } catch (err: any) {
-                toolSpinner.fail(chalk.red(err.message));
+                this.tm.writeStatusBar(chalk.red(`Status: Error executing tool ${toolCall.name}.`));
                 this.history.push({ role: "system", content: `Error: ${err.message}` });
               }
           }
       } else {
+          this.tm.writeStatusBar(chalk.gray("Status: Idle. Awaiting user input."));
           return;
       }
     }
+    this.tm.writeStatusBar(chalk.gray("Status: Idle. Awaiting user input."));
   }
 
   async cleanup() {

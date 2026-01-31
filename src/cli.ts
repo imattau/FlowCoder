@@ -27,7 +27,6 @@ export function createCli() {
   const tm = TerminalManager.getInstance();
   const projectInitializer = new ProjectInitializer();
 
-  // Flag to indicate if an AI turn is in progress
   let aiTurnInProgress = false;
 
   program
@@ -108,20 +107,19 @@ export function createCli() {
           prompt: chalk.bold.magenta("flowcoder> "),
         });
 
-        // Setup for Esc interruption
+        tm.writeStatusBar(chalk.gray(` CWD: ${process.cwd()} | Default: ${currentConfig.DEFAULT_MODEL_FILE} | Tiny: ${currentConfig.TINY_MODEL_FILE} `));
+
         if (process.stdin.isTTY) {
             process.stdin.setRawMode(true);
             process.stdin.on('data', (key) => {
-                // Ctrl+C also exits
                 if (key.toString() === '\x03') { // Ctrl+C
                     tm.showCursor();
                     tm.write(chalk.cyan("\n👋 Happy coding!\n"));
                     process.exit(0);
                 }
-                // Esc key
                 if (key.toString() === '\x1b') { // Esc
                     if (aiTurnInProgress) {
-                        chatLoop.isInterrupted = true; // Signal ChatLoop to stop
+                        chatLoop.isInterrupted = true;
                     }
                 }
             });
@@ -129,7 +127,6 @@ export function createCli() {
 
 
         rl.on("line", async (line) => {
-          // Clear current prompt line before writing anything else
           tm.moveCursor(1, tm.promptRow);
           readline.clearLine(process.stdout, 0);
 
@@ -145,8 +142,6 @@ export function createCli() {
             return;
           }
 
-          // --- Command Interception ---
-          
           if (input.startsWith("/")) {
               const [cmd, ...args] = input.slice(1).split(" ");
               switch (cmd) {
@@ -154,7 +149,7 @@ export function createCli() {
                       tm.write(`\n${chalk.bold("Available Commands:")}`);
                       tm.write(`\n${chalk.cyan(" /help")}          Show this help`);
                       tm.write(`\n${chalk.cyan(" /config")}        Show current configuration`);
-                      tm.write(`\n${chalk.cyan(" /init [name]")}   Initialize .flowcoder setup for the current project`);
+                      tm.write(`\n${chalk.cyan(" /init [name]")})   Initialize .flowcoder setup for the current project`);
                       tm.write(`\n${chalk.cyan(" /task <desc>")})  Start a new task`);
                       tm.write(`\n${chalk.cyan(" /clear")}         Clear chat history`);
                       tm.write(`\n${chalk.cyan(" ! <cmd>")})       Execute shell command directly\n`);
@@ -192,7 +187,7 @@ export function createCli() {
                       tm.write(`\n${chalk.yellow("🧹 History cleared.")}\n`);
                       break;
                   default:
-                      tm.write(`\n${chalk.red("Unknown command: /${cmd}")}\n`);
+                      tm.write(`\n${chalk.red(`Unknown command: /${cmd}`)}\n`);
               }
               tm.render();
               rl.prompt();
@@ -221,7 +216,7 @@ export function createCli() {
             aiTurnInProgress = true;
             await chatLoop.processInput(input);
           } catch (err: any) {
-            tm.write(`\n${chalk.red("Error during chat: ")}${err.message}\n`);
+            tm.write(`\n${chalk.red(`Error during chat: ${err.message}`)}\n`);
           } finally {
             aiTurnInProgress = false;
           }
@@ -234,7 +229,7 @@ export function createCli() {
           process.exit(0);
         });
       } catch (err: any) {
-        tm.write(`\n${chalk.red("Failed to initialize chat: ")}${err.message}\n`);
+        tm.write(`\n${chalk.red(`Failed to initialize chat: ${err.message}`)}\n`);
         process.exit(1);
       }
     });

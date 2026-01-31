@@ -22,6 +22,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 - [Modular & OO Code Generation](./tracks/modular-oo/index.md) - Prioritizing modular and object-oriented code from the outset.
 - [Robust UI Interaction & Output Management](./tracks/ui-interaction/index.md) - Implementing Esc interruption, command indicators, and correct output routing.
 - [LSP Integration & Advanced Indexing](./tracks/lsp-indexing/index.md) - Integrating Language Server Protocol for precise code understanding.
+- [Status Bar & Contextual Indicators](./tracks/status-bar/index.md) - Displaying essential information below the command line.
 - [Enhanced Terminal UI](./tracks/enhanced-ui/index.md) - Creating a bounded command line and working area.
 - [Universal Context Discovery](./tracks/universal-discovery/index.md) - Detecting and adopting context from other AI tools and project docs.
 - [Automated Reference Grounding](./tracks/ref-grounding/index.md) - Proactive dependency scanning and documentation auditing.

@@ -9,17 +9,18 @@ export class TerminalManager {
     private scrollOffset: number = 0;
     private maxOutputRows: number = 0;
     private isRendering: boolean = false;
-    private promptHeight: number = 1; // Number of lines the prompt takes
+    private promptHeight: number = 1; 
+    private statusBarHeight: number = 1; // Reserve 1 line for status bar
 
     private constructor(stream: NodeJS.WriteStream) {
         this.stream = stream;
         this.stream.on("resize", () => {
             this._rows = process.stdout.rows;
             this._columns = process.stdout.columns;
-            this.updateMaxOutputRows();
+            this.updateLayoutMetrics();
             this.render(); // Redraw on resize
         });
-        this.updateMaxOutputRows();
+        this.updateLayoutMetrics();
     }
 
     static getInstance(stream: NodeJS.WriteStream = process.stdout): TerminalManager {
@@ -33,18 +34,22 @@ export class TerminalManager {
     get columns(): number { return this._columns; }
 
     get promptRow(): number {
-        return this.rows - this.promptHeight + 1; // 1-based row for the prompt start
+        return this.rows - this.statusBarHeight; // Prompt above status bar
     }
 
-    private updateMaxOutputRows() {
-        this.maxOutputRows = this.rows - this.promptHeight; 
+    get statusBarRow(): number {
+        return this.rows - this.statusBarHeight + 1; // Status bar at the very bottom
+    }
+
+    private updateLayoutMetrics() {
+        this.maxOutputRows = this.rows - this.promptHeight - this.statusBarHeight; 
     }
 
     clearScreen() {
         this.outputBuffer = [];
         this.scrollOffset = 0;
-        this.stream.write("\x1b[2J"); // Clear screen
-        this.stream.write("\x1b[H");  // Move cursor to home (0,0)
+        this.stream.write("\x1b[2J");
+        this.stream.write("\x1b[H");
     }
 
     moveCursor(x: number, y: number) {
@@ -65,8 +70,7 @@ export class TerminalManager {
         if (this.isRendering) return;
         this.isRendering = true;
 
-        // Save cursor position
-        this.stream.write("\x1b[s"); 
+        this.stream.write("\x1b[s"); // Save cursor position
         
         // Clear working area (above prompt)
         for (let i = 1; i <= this.maxOutputRows; i++) {
@@ -95,6 +99,16 @@ export class TerminalManager {
         this.stream.write("\x1b[u");
 
         this.isRendering = false;
+    }
+
+    writeStatusBar(text: string) {
+        // Clear status bar line
+        this.moveCursor(1, this.statusBarRow);
+        readline.clearLine(this.stream, 0);
+        // Write status text
+        this.stream.write(text.substring(0, this.columns));
+        // Restore cursor position for prompt
+        this.stream.write("\x1b[u"); 
     }
     
     hideCursor() {
