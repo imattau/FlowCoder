@@ -104,27 +104,28 @@ export function createCli() {
         const rl = readline.createInterface({
           input: process.stdin,
           output: process.stdout,
-          prompt: chalk.bold.magenta("flowcoder> "),
+          prompt: "", // No default prompt
+          terminal: true,
         });
 
         tm.writeStatusBar(chalk.gray(` CWD: ${process.cwd()} | Default: ${currentConfig.DEFAULT_MODEL_FILE} | Tiny: ${currentConfig.TINY_MODEL_FILE} `));
+        tm.render(); // Initial render to draw the box and position cursor
+        tm.drawPrompt(chalk.bold.magenta("flowcoder> "));
 
         if (process.stdin.isTTY) {
             process.stdin.setRawMode(true);
             process.stdin.on('data', (key) => {
-                // Ctrl+C also exits
                 if (key.toString() === '\x03') { // Ctrl+C
                     tm.showCursor();
                     tm.write(chalk.cyan("\n👋 Happy coding!\n"));
                     process.exit(0);
                 }
-                // Esc key
                 if (key.toString() === '\x1b') { // Esc
                     if (aiTurnInProgress) {
-                        chatLoop.isInterrupted = true; // Signal ChatLoop to stop
+                        chatLoop.isInterrupted = true;
                         tm.write(chalk.red("\nAI turn interrupted by user. Returning control...\n"));
                         tm.render();
-                        rl.prompt();
+                        tm.drawPrompt(chalk.bold.magenta("flowcoder> "));
                     }
                 }
             });
@@ -132,19 +133,13 @@ export function createCli() {
 
 
         rl.on("line", async (line) => {
-          tm.moveCursor(1, tm.promptRow);
-          readline.clearLine(process.stdout, 0);
-
           const input = line.trim();
           
           if (!input) {
-              tm.render(); // Re-render to ensure prompt is correct
-              rl.prompt();
+              tm.drawPrompt(chalk.bold.magenta("flowcoder> "));
               return;
           }
 
-          // --- Command Interception ---
-          
           if (input.startsWith("/")) {
               const [cmd, ...args] = input.slice(1).split(" ");
               switch (cmd) {
@@ -199,7 +194,7 @@ export function createCli() {
                       tm.write(`\n${chalk.red("Unknown command: /${cmd}")}\n`);
               }
               tm.render();
-              rl.prompt();
+              tm.drawPrompt(chalk.bold.magenta("flowcoder> "));
               return;
           }
 
@@ -217,7 +212,7 @@ export function createCli() {
                   }
               }
               tm.render();
-              rl.prompt();
+              tm.drawPrompt(chalk.bold.magenta("flowcoder> "));
               return;
           }
 
@@ -230,7 +225,7 @@ export function createCli() {
             aiTurnInProgress = false;
           }
           tm.render();
-          rl.prompt();
+          tm.drawPrompt(chalk.bold.magenta("flowcoder> "));
         }).on("close", async () => {
           await chatLoop.cleanup();
           tm.showCursor();

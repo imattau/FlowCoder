@@ -9,5 +9,5 @@
 - [x] **Step 2.2:** Implement output buffer and scrolling logic in `TerminalManager`.
 
 ## Phase 3: Dynamic Redrawing
-- [ ] **Step 3.1:** Optimize screen updates to minimize flickering.
-- [ ] **Step 3.2:** Integrate UI into all agent/tool outputs for consistent display.
+- [x] **Step 3.1:** Optimize screen updates to minimize flickering.
+- [x] **Step 3.2:** Integrate UI into all agent/tool outputs for consistent display.

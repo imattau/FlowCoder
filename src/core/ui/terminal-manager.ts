@@ -10,7 +10,8 @@ export class TerminalManager {
     private maxOutputRows: number = 0;
     private isRendering: boolean = false;
     private promptHeight: number = 1; 
-    private statusBarHeight: number = 1; // Reserve 1 line for status bar
+    private statusBarHeight: number = 1;
+    private commandLineHeight: number = 3; // Input line + top/bottom border
 
     private constructor(stream: NodeJS.WriteStream) {
         this.stream = stream;
@@ -34,11 +35,11 @@ export class TerminalManager {
     get columns(): number { return this._columns; }
 
     get promptRow(): number {
-        return this.rows - this.statusBarHeight; // Prompt above status bar
+        return this.rows - this.statusBarHeight - this.commandLineHeight + 2; // Input line within the box
     }
 
     get statusBarRow(): number {
-        return this.rows - this.statusBarHeight + 1; // Status bar at the very bottom
+        return this.rows; // Status bar at the very bottom
     }
 
     private updateLayoutMetrics() {
@@ -72,7 +73,7 @@ export class TerminalManager {
 
         this.stream.write("\x1b[s"); // Save cursor position
         
-        // Clear working area (above prompt)
+        // Clear working area
         for (let i = 1; i <= this.maxOutputRows; i++) {
             this.moveCursor(1, i);
             readline.clearLine(this.stream, 0);
@@ -90,10 +91,22 @@ export class TerminalManager {
             }
         }
         
-        // Draw the horizontal line above the prompt
-        this.moveCursor(1, this.promptRow - 1);
+        // Draw command line box
+        const boxTopRow = this.rows - this.statusBarHeight - this.commandLineHeight + 1;
+        
+        this.moveCursor(1, boxTopRow);
         readline.clearLine(this.stream, 0);
-        this.stream.write('─'.repeat(this.columns));
+        this.stream.write('┌' + '─'.repeat(this.columns - 2) + '┐');
+        
+        this.moveCursor(1, boxTopRow + 1); // Input line
+        readline.clearLine(this.stream, 0);
+        this.stream.write('│');
+        this.moveCursor(this.columns, boxTopRow + 1);
+        this.stream.write('│');
+
+        this.moveCursor(1, boxTopRow + 2); // Bottom border of command line
+        readline.clearLine(this.stream, 0);
+        this.stream.write('└' + '─'.repeat(this.columns - 2) + '┘');
         
         // Restore cursor position for readline prompt
         this.stream.write("\x1b[u");
@@ -101,14 +114,20 @@ export class TerminalManager {
         this.isRendering = false;
     }
 
+    drawPrompt(promptText: string) {
+        this.stream.write("\x1b[s"); // Save cursor position
+        this.moveCursor(2, this.promptRow); // Move inside the box
+        readline.clearLine(this.stream, 0); // Clear the line within the box
+        this.stream.write(promptText);
+        this.stream.write("\x1b[u"); // Restore cursor position
+    }
+
     writeStatusBar(text: string) {
-        // Clear status bar line
+        this.stream.write("\x1b[s"); // Save cursor
         this.moveCursor(1, this.statusBarRow);
         readline.clearLine(this.stream, 0);
-        // Write status text
         this.stream.write(text.substring(0, this.columns));
-        // Restore cursor position for prompt
-        this.stream.write("\x1b[u"); 
+        this.stream.write("\x1b[u"); // Restore cursor
     }
     
     hideCursor() {
