@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { CONFIG } from "../../config.js";
-import ora from "ora";
+import { BlessedUIManager } from "../ui/blessed-ui-manager.js";
 import chalk from "chalk";
 
 export interface McpTool {
@@ -14,11 +14,15 @@ export interface McpTool {
 export class McpHost {
   private clients: Map<string, Client> = new Map();
   private tools: Map<string, McpTool> = new Map();
+  private ui: BlessedUIManager;
+
+  constructor() {
+      this.ui = BlessedUIManager.getInstance();
+  }
 
   async init() {
     const serversToLoad: Record<string, any> = {};
 
-    // Load defaults if enabled
     if (CONFIG.MCP_CONFIG.enable_defaults) {
         for (const [name, cfg] of Object.entries(CONFIG.MCP_CONFIG.defaults)) {
             if (cfg.enabled) {
@@ -27,13 +31,14 @@ export class McpHost {
         }
     }
 
-    // Load custom servers
     for (const [name, cfg] of Object.entries(CONFIG.MCP_CONFIG.custom_servers)) {
         serversToLoad[name] = cfg;
     }
 
     for (const [name, config] of Object.entries(serversToLoad)) {
-      const spinner = ora(chalk.dim(`Connecting to MCP Server: ${name}...`)).start();
+      this.ui.write(chalk.dim(`Connecting to MCP Server: ${name}...`));
+      this.ui.writeStatusBar(chalk.yellow(`Connecting to MCP: ${name}...`));
+      
       try {
         const env: Record<string, string> = {};
         for (const [k, v] of Object.entries(process.env)) {
@@ -72,11 +77,12 @@ export class McpHost {
           
           this.tools.set(tool.name, mcpTool);
         }
-        spinner.succeed(chalk.green(`Connected to MCP Server: ${name} (${response.tools.length} tools)`));
+        this.ui.write(chalk.green(`✔ Connected to MCP Server: ${name} (${response.tools.length} tools)`));
       } catch (err: any) {
-        spinner.fail(chalk.red(`Failed to connect to MCP Server ${name}: ${err.message}`));
+        this.ui.write(chalk.red(`✖ Failed to connect to MCP Server ${name}: ${err.message}`));
       }
     }
+    this.ui.writeStatusBar(chalk.gray("All MCP servers processed."));
   }
 
   getTools(): McpTool[] {

@@ -37,8 +37,8 @@ export const CONFIG = {
       },
       "typescript-lsp": {
         enabled: true,
-        command: "typescript-language-server",
-        args: ["--stdio"]
+        command: "npx",
+        args: ["-y", "typescript-language-server", "--stdio"]
       }
     },
     custom_servers: {} as Record<string, { command: string, args: string[], env?: Record<string, string> }>

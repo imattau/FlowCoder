@@ -32,19 +32,23 @@ export class ChatLoop {
     this.stateManager = new StateManager(cwd);
     this.guard = new CommandGuard(cwd);
     this.commands = discoverProjectCommands(cwd);
-    this.mcp = new McpHost();
+    this.ui = BlessedUIManager.getInstance();
+    this.mcp = new McpHost(); // Now McpHost will use the UI instance
     this.agents = new AgentFactory({
         "default": defaultEngine,
         "tiny": tinyEngine
     });
-    this.ui = BlessedUIManager.getInstance();
   }
 
   async init() {
+      // 1. Init MCP (will log to UI workspace now)
       await this.mcp.init();
+      
+      // 2. Prepend project summary
+      const summary = this.stateManager.getProjectSummary();
       this.history.push({
           role: "system", 
-          content: `You are resuming work on a project. ${this.stateManager.getProjectSummary()}
+          content: `You are resuming work on a project. ${summary}
 ${PromptManager.getSystemPrompt(this.mcp.getTools())}` 
       });
   }
@@ -87,7 +91,6 @@ ${err.stderr?.toString() || ""}`;
 ${idx + 1}. ${chalk.cyan(cmd.name)}(${chalk.dim(JSON.stringify(cmd.parameters))})`);
       });
 
-      // Use blessed's input for confirmation
       const answer = await this.ui.getInputPrompt(chalk.bold.magenta("\nExecute actions? [(a)ll / (s)tep / (c)ancel]: "));
       const a = answer.toLowerCase();
       if (a === "a" || a === "all") return "all";
@@ -97,7 +100,6 @@ ${idx + 1}. ${chalk.cyan(cmd.name)}(${chalk.dim(JSON.stringify(cmd.parameters))}
   }
 
   private async askUserPrompt(question: string): Promise<string> {
-      // Use blessed's input for user questions
       return await this.ui.getInputPrompt(chalk.bold.magenta(`
 ❓ AI Question: ${question}
 Your answer: `));
