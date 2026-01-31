@@ -108,6 +108,8 @@ export function createCli() {
           terminal: true,
         });
 
+        tm.setReadline(rl); // Pass readline instance to TerminalManager
+
         tm.writeStatusBar(chalk.gray(` CWD: ${process.cwd()} | Default: ${modelPath.split('/').pop()} | Tiny: ${tinyModelPath.split('/').pop()} `));
         tm.render(); // Initial render to draw the box and position cursor
         tm.drawPrompt(chalk.bold.magenta("flowcoder> "));
