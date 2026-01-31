@@ -3,7 +3,7 @@ import { PromptManager } from "./prompt-manager.js";
 import { tools } from "./tools.js";
 import { StateManager } from "./state.js";
 import { CommandGuard } from "./command-guard.js";
-import { AgentFactory } from "./agents/factory.js";
+import { AgentFactory, type AgentType } from "./agents/factory.js";
 import { PlannerAgent, DebugAgent } from "./agents/base.js";
 import { McpHost } from "./mcp/host.js";
 import { execSync } from "child_process";
@@ -32,10 +32,7 @@ export class ChatLoop {
     this.mcp = new McpHost();
     this.agents = new AgentFactory({
         "default": defaultEngine,
-        "tiny": tinyEngine,
-        "planner": defaultEngine,
-        "coder": defaultEngine,
-        "debugger": tinyEngine
+        "tiny": tinyEngine
     });
   }
 
@@ -95,7 +92,7 @@ export class ChatLoop {
     this.history.push({ role: "user", content: input });
     
     let turnCount = 0;
-    const maxTurns = 12;
+    const maxTurns = 15;
 
     while (turnCount < maxTurns) {
       turnCount++;
@@ -105,13 +102,34 @@ export class ChatLoop {
           discardStdin: false
       }).start();
 
+      // 1. PLanning Turn
       const planner = this.agents.getAgent<PlannerAgent>("planner");
-      const assistantResponse = await planner.run(input, this.history.map(h => `${h.role}: ${h.content}`));
+      const plannerResponse = await planner.run(input, this.history.map(h => `${h.role}: ${h.content}`));
       
       spinner.stop();
+
+      // 2. Specialized Delegation
+      let finalTurnResponse = plannerResponse;
       
-      this.commandQueue = PromptManager.parseToolCalls(assistantResponse);
-      const plainText = assistantResponse.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "").trim();
+      if (plannerResponse.includes("PatchAgent")) {
+          const patchSpinner = ora(chalk.cyan("Delegating to PatchAgent (Sniper)...")).start();
+          const patcher = this.agents.getAgent<any>("patcher");
+          finalTurnResponse = await patcher.run(plannerResponse);
+          patchSpinner.stop();
+      } else if (plannerResponse.includes("BoilerplateAgent")) {
+          const buildSpinner = ora(chalk.cyan("Delegating to BoilerplateAgent (Builder)...")).start();
+          const builder = this.agents.getAgent<any>("boilerplate");
+          finalTurnResponse = await builder.run(plannerResponse);
+          buildSpinner.stop();
+      } else if (plannerResponse.includes("TemplateAgent")) {
+          const weaverSpinner = ora(chalk.cyan("Delegating to TemplateAgent (Weaver)...")).start();
+          const weaver = this.agents.getAgent<any>("template");
+          finalTurnResponse = await weaver.run(plannerResponse);
+          weaverSpinner.stop();
+      }
+
+      this.commandQueue = PromptManager.parseToolCalls(finalTurnResponse);
+      const plainText = finalTurnResponse.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "").trim();
       
       if (plainText) {
           console.log(chalk.blue.bold("AI: ") + plainText);
@@ -133,10 +151,8 @@ export class ChatLoop {
               
               if (!autoApprove) {
                   console.log(chalk.yellow(`\nNext action: ${toolCall.name}`));
-                  // We could ask again for each step here if desired
               }
 
-              // Validation
               const validation = this.guard.validateToolCall(toolCall.name, toolCall.parameters);
               if (!validation.safe) {
                 const errorMsg = `Error: Tool call rejected. ${validation.reason}`;
@@ -145,7 +161,6 @@ export class ChatLoop {
                 continue;
               }
 
-              // Special confirmation for dangerous tools if not already in 'all' mode
               if (!autoApprove && (toolCall.name === "run_cmd" || toolCall.name === "cache_global_ref" || toolCall.name === "scaffold_project")) {
                   const confirmed = await this.guard.confirmCommand(toolCall.name);
                   if (!confirmed) {
@@ -168,7 +183,6 @@ export class ChatLoop {
                 this.history.push({ role: "system", content: formattedResult });
                 toolSpinner.succeed(chalk.green(`Done: ${toolCall.name}`));
 
-                // Auto-verify on change
                 if (toolCall.name === "write_file" || toolCall.name === "patch_file") {
                   const verifySpinner = ora(chalk.cyan("Verifying...")).start();
                   const verification = this.runVerification();
@@ -180,7 +194,6 @@ export class ChatLoop {
                     const analysis = await debuggerAgent.run(verification.output);
                     console.log(chalk.magenta.bold("\n🔍 Debugger: ") + analysis);
                     this.history.push({ role: "system", content: `Debugger: ${analysis}` });
-                    // On failure, we abort the rest of the queue to allow fix
                     this.commandQueue = [];
                   }
                 }
@@ -190,7 +203,6 @@ export class ChatLoop {
               }
           }
       } else {
-          // No more tools, we are likely done
           return;
       }
     }
