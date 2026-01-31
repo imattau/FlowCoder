@@ -85,12 +85,10 @@ export function createCli() {
 
       try {
         const engine = new InferenceEngine();
-        const model = await modelManager.loadModel(modelPath);
-        await engine.init(model);
+        await engine.init(modelPath);
 
-        const tinyModel = await modelManager.loadModel(tinyModelPath);
         const tinyEngine = new InferenceEngine();
-        await tinyEngine.init(tinyModel);
+        await tinyEngine.init(tinyModelPath);
 
         const chatLoop = new ChatLoop(engine, tinyEngine);
         await chatLoop.init();

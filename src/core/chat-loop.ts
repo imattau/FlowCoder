@@ -97,50 +97,42 @@ export class ChatLoop {
     while (turnCount < maxTurns) {
       turnCount++;
       
-      // 1. INTENT ANALYSIS
-      const intentSpinner = ora(chalk.dim("Analyzing intent...")).start();
+      // 1. INTENT ANALYSIS (Tiny Model)
       const intentAgent = this.agents.getAgent<IntentAgent>("intent");
       const intent = await intentAgent.run(input);
-      intentSpinner.stop();
       console.log(chalk.dim(`Intent: ${intent}`));
 
-      // 2. CONTEXT GATHERING
-      const contextSpinner = ora(chalk.dim("Gathering context...")).start();
+      // 2. CONTEXT GATHERING (Tiny Model)
       const contextAgent = this.agents.getAgent<ContextAgent>("context");
       const contextResults = await contextAgent.run(input, intent);
-      contextSpinner.stop();
-      // Handle tool calls from ContextAgent if it chooses to search/read
       const contextTools = PromptManager.parseToolCalls(contextResults);
       for (const call of contextTools) {
           const res = await (tools[call.name] as any).execute(call.parameters);
           this.history.push({ role: "system", content: PromptManager.formatToolResult(res) });
       }
 
-      // 3. DISPATCH & PLAN
-      const dispatchSpinner = ora(chalk.dim("Planning execution...")).start();
+      // 3. DISPATCH & PLAN (Default/Heavier Model)
       const dispatcher = this.agents.getAgent<DispatcherAgent>("dispatcher");
       const dispatchResponse = await dispatcher.run(input, this.history.map(h => `${h.role}: ${h.content}`));
-      dispatchSpinner.stop();
 
       this.stateManager.writeScratchpad(dispatchResponse);
+
+      // STRATEGIC UNLOAD: Dispatcher phase is done, free memory before execution
+      await this.defaultEngine.unload();
 
       let finalTurnResponse = dispatchResponse;
       
       if (dispatchResponse.includes("PatchAgent")) {
-          const patchSpinner = ora(chalk.cyan("Delegating to PatchAgent (Sniper)...")).start();
           const patcher = this.agents.getAgent<any>("patcher");
           finalTurnResponse = await patcher.run("Context updated in scratchpad.");
-          patchSpinner.stop();
       } else if (dispatchResponse.includes("BoilerplateAgent")) {
-          const buildSpinner = ora(chalk.cyan("Delegating to BoilerplateAgent (Builder)...")).start();
+          // If we need BoilerplateAgent (Builder), it might re-load the default engine 
+          // because it's configured to use defaultEng in the factory.
           const builder = this.agents.getAgent<any>("boilerplate");
           finalTurnResponse = await builder.run("Context updated in scratchpad.");
-          buildSpinner.stop();
       } else if (dispatchResponse.includes("TemplateAgent")) {
-          const weaverSpinner = ora(chalk.cyan("Delegating to TemplateAgent (Weaver)...")).start();
           const weaver = this.agents.getAgent<any>("template");
           finalTurnResponse = await weaver.run("Context updated in scratchpad.");
-          weaverSpinner.stop();
       }
 
       this.commandQueue = PromptManager.parseToolCalls(finalTurnResponse);
@@ -226,5 +218,7 @@ export class ChatLoop {
 
   async cleanup() {
       await this.mcp.cleanup();
+      await this.defaultEngine.unload();
+      await this.tinyEngine.unload();
   }
 }

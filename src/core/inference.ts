@@ -1,29 +1,49 @@
 import { getLlama, LlamaChatSession, LlamaLogLevel, type LlamaModel, type LlamaContext } from "node-llama-cpp";
+import ora from "ora";
+import chalk from "chalk";
 
 export class InferenceEngine {
   private model: LlamaModel | null = null;
   private context: LlamaContext | null = null;
   private session: LlamaChatSession | null = null;
+  private modelPath: string | null = null;
   
   private lastInferenceTime: number = 0;
   private lastTokenCount: number = 0;
 
-  async init(model: LlamaModel) {
-    // This is called globally once but ensure we are using disabled log level
-    await getLlama({
-        logLevel: LlamaLogLevel.disabled
-    });
-    
-    this.model = model;
-    this.context = await this.model.createContext();
-    this.session = new LlamaChatSession({
-      contextSequence: this.context.getSequence(),
-    });
+  async init(modelPath: string) {
+    this.modelPath = modelPath;
+  }
+
+  private async ensureLoaded() {
+    if (this.session) return;
+    if (!this.modelPath) throw new Error("Model path not set. Call init(modelPath) first.");
+
+    const spinner = ora(chalk.dim(`Loading model: \${this.modelPath.split('/').pop()}...`)).start();
+    try {
+        const llama = await getLlama({
+            logLevel: LlamaLogLevel.disabled
+        });
+        
+        this.model = await llama.loadModel({
+          modelPath: this.modelPath,
+        });
+        this.context = await this.model.createContext();
+        this.session = new LlamaChatSession({
+          contextSequence: this.context.getSequence(),
+        });
+        spinner.succeed(chalk.dim(`Model loaded: \${this.modelPath.split('/').pop()}`));
+    } catch (err: any) {
+        spinner.fail(chalk.red(`Failed to load model \${this.modelPath}: \${err.message}`));
+        throw err;
+    }
   }
 
   async generateResponse(prompt: string, onToken?: (token: string) => void): Promise<string> {
+    await this.ensureLoaded();
+    
     if (!this.session) {
-      throw new Error("Inference engine not initialized. Call init(model) first.");
+      throw new Error("Inference engine failed to load session.");
     }
 
     const startTime = performance.now();
@@ -45,6 +65,16 @@ export class InferenceEngine {
     return response;
   }
 
+  async unload() {
+      if (this.session) {
+          // In node-llama-cpp, references need to be cleared for GC
+          this.session = null;
+          this.context = null;
+          this.model = null;
+          console.log(chalk.dim(`Model unloaded from memory.`));
+      }
+  }
+
   getMetrics() {
     const seconds = this.lastInferenceTime / 1000;
     const tps = seconds > 0 ? this.lastTokenCount / seconds : 0;
@@ -56,6 +86,6 @@ export class InferenceEngine {
   }
 
   isInitialized(): boolean {
-    return this.session !== null;
+    return this.modelPath !== null;
   }
 }
