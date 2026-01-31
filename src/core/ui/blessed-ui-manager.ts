@@ -6,7 +6,7 @@ export class BlessedUIManager {
   public outputBox: blessed.Widgets.Log;
   public inputTextBox: blessed.Widgets.TextboxElement;
   public statusBar: blessed.Widgets.BoxElement;
-  private currentPrompt: string = "";
+  private promptLabel: blessed.Widgets.BoxElement;
 
   private constructor() {
     this.screen = blessed.screen({
@@ -14,7 +14,7 @@ export class BlessedUIManager {
       title: "FlowCoder",
       sendFocus: true,
       dockBorders: true,
-      mouse: false // Disable mouse support to avoid tracking sequences in input
+      mouse: false
     });
 
     this.outputBox = blessed.log({
@@ -40,28 +40,42 @@ export class BlessedUIManager {
       }
     } as any);
 
-    this.inputTextBox = blessed.textbox({
-      parent: this.screen,
-      bottom: 2,
-      left: 0,
-      width: "100%",
-      height: 3,
+    // Bounded input area (the container)
+    const inputContainer = (blessed as any).box({
+        parent: this.screen,
+        bottom: 1,
+        left: 0,
+        width: "100%",
+        height: 3,
+        border: { type: "line", fg: "magenta" }
+    });
+
+    this.promptLabel = (blessed as any).box({
+        parent: inputContainer,
+        top: 0,
+        left: 0,
+        height: 1,
+        width: "shrink",
+        tags: true,
+        content: ""
+    });
+
+    this.inputTextBox = (blessed as any).textbox({
+      parent: inputContainer,
+      top: 0,
+      left: 0, // Will be dynamically adjusted
+      height: 1,
+      width: "100%-2",
       inputOnFocus: true,
       keys: true,
-      mouse: false, // Explicitly disable mouse for input
+      mouse: false,
       style: {
         fg: "white",
-        bg: "black",
-        border: {
-          fg: "magenta"
-        }
-      },
-      border: {
-        type: "line"
+        bg: "black"
       }
-    } as any);
+    });
 
-    this.statusBar = blessed.box({
+    this.statusBar = (blessed as any).box({
       parent: this.screen,
       bottom: 0,
       left: 0,
@@ -73,7 +87,7 @@ export class BlessedUIManager {
         bg: "gray"
       },
       content: "Initializing..."
-    } as any);
+    });
 
     this.screen.render();
   }
@@ -96,15 +110,21 @@ export class BlessedUIManager {
   }
 
   drawPrompt(promptText: string) {
-    this.currentPrompt = promptText;
-    this.inputTextBox.readInput();
-    this.inputTextBox.setContent(promptText + this.inputTextBox.value);
+    this.promptLabel.setContent(promptText);
+    const cleanPrompt = promptText.replace(/\x1b\[[0-9;]*m/g, "");
+    this.inputTextBox.left = cleanPrompt.length;
+    this.inputTextBox.width = `100%-\${cleanPrompt.length + 2}`;
+    
     this.screen.render();
+    this.inputTextBox.readInput();
     this.inputTextBox.focus();
   }
 
   async getInputPrompt(promptText: string): Promise<string> {
-    this.inputTextBox.setContent(promptText);
+    this.promptLabel.setContent(promptText);
+    const cleanPrompt = promptText.replace(/\x1b\[[0-9;]*m/g, "");
+    this.inputTextBox.left = cleanPrompt.length;
+    
     this.screen.render();
     this.inputTextBox.focus();
 
