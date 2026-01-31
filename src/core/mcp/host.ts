@@ -56,6 +56,11 @@ export class McpHost {
           env: env
         });
 
+        // --- NEW: Attach stderr listener BEFORE connect ---
+        // StdioClientTransport has a 'process' property once created (but not yet spawned until connect)
+        // Actually, the SDK spawns in connect(). But we can try to access the process earlier if possible,
+        // or ensure we attach as soon as it's available.
+        
         const client = new Client({
           name: "FlowCoder-Host",
           version: "1.0.0"
@@ -63,11 +68,10 @@ export class McpHost {
           capabilities: {}
         });
 
-        await client.connect(transport);
-        this.clients.set(name, client);
-
-        // --- NEW: Capture and redirect stderr ---
-        // StdioClientTransport has a 'process' property once connected
+        // Attach listener immediately after connect call starts
+        const connectPromise = client.connect(transport);
+        
+        // At this point transport.process should be available
         const serverProcess = (transport as any).process;
         if (serverProcess && serverProcess.stderr) {
             serverProcess.stderr.on("data", (data: Buffer) => {
@@ -79,6 +83,9 @@ export class McpHost {
                 }
             });
         }
+
+        await connectPromise;
+        this.clients.set(name, client);
 
         const response = await client.listTools();
         for (const tool of response.tools) {
