@@ -6,8 +6,6 @@ export class BlessedUIManager {
   public outputBox: blessed.Widgets.Log;
   public inputTextBox: blessed.Widgets.TextboxElement;
   public statusBar: blessed.Widgets.BoxElement;
-  private promptLabel: blessed.Widgets.BoxElement;
-  private inputContainer: blessed.Widgets.BoxElement;
 
   private constructor() {
     this.screen = blessed.screen({
@@ -16,14 +14,13 @@ export class BlessedUIManager {
       fullUnicode: true,
       dockBorders: true,
       autoNextFocus: true,
-      // Use 'default' to inherit terminal background/foreground
       style: {
           bg: "default",
           fg: "default"
       }
     });
 
-    this.outputBox = blessed.log({
+    this.outputBox = (blessed as any).log({
       parent: this.screen,
       top: 0,
       left: 0,
@@ -35,7 +32,7 @@ export class BlessedUIManager {
       scrollbar: {
         ch: " ",
         style: { bg: "cyan" }
-      } as any,
+      },
       style: {
         bg: "default",
         fg: "default"
@@ -45,57 +42,28 @@ export class BlessedUIManager {
         fg: "cyan"
       },
       valign: "bottom"
-    } as any);
-
-    // Bounded input area
-    this.inputContainer = (blessed as any).box({
-        parent: this.screen,
-        bottom: 1,
-        left: 0,
-        width: "100%",
-        height: 3,
-        style: {
-            bg: "default",
-            fg: "default"
-        },
-        border: { type: "line", fg: "magenta" }
     });
 
-    this.promptLabel = (blessed as any).box({
-        parent: this.inputContainer,
-        top: 0,
-        left: 0,
-        height: 1,
-        width: "shrink",
-        tags: true,
-        style: {
-            bg: "default",
-            fg: "magenta" // Keep prompt color
-        },
-        content: ""
-    });
-
+    // Simplified Input: Single widget with border and label
     this.inputTextBox = (blessed as any).textbox({
-      parent: this.inputContainer,
-      top: 0,
-      left: 12, 
-      height: 1,
-      width: "100%-14",
+      parent: this.screen,
+      bottom: 1,
+      left: 0,
+      width: "100%",
+      height: 3,
       keys: true,
       mouse: false,
       inputOnFocus: true,
-      cursor: {
-          artificial: true,
-          shape: 'block',
-          blink: true,
-          color: 'default'
+      border: {
+          type: "line",
+          fg: "magenta"
       },
+      label: " {magenta-fg}flowcoder{/magenta-fg} ",
       style: {
           bg: "default",
           fg: "default",
           focus: {
-              bg: "default",
-              fg: "default"
+              border: { fg: "white" }
           }
       }
     });
@@ -111,19 +79,6 @@ export class BlessedUIManager {
         inverse: true 
       },
       content: "Initializing..."
-    });
-
-    // Detect keypresses to change prompt color
-    this.inputTextBox.on("keypress", () => {
-        const value = this.inputTextBox.value || "";
-        if (value.startsWith("/")) {
-            this.promptLabel.style.fg = "cyan";
-        } else if (value.startsWith("!")) {
-            this.promptLabel.style.fg = "yellow";
-        } else {
-            this.promptLabel.style.fg = "magenta";
-        }
-        this.screen.render();
     });
 
     this.screen.on("resize", () => {
@@ -152,32 +107,22 @@ export class BlessedUIManager {
   }
 
   drawPrompt(promptText: string) {
-    const cleanPrompt = promptText.replace(/\x1b\[[0-9;]*m/g, "");
-    this.promptLabel.setContent(promptText);
-    this.inputTextBox.left = cleanPrompt.length;
-    this.inputTextBox.width = `100%-\${cleanPrompt.length + 2}`;
-    
-    this.promptLabel.style.fg = "magenta";
-    
     this.inputTextBox.focus();
-    this.inputTextBox.readInput(); 
+    this.inputTextBox.readInput();
     this.screen.render();
   }
 
   async getInputPrompt(promptText: string): Promise<string> {
-    const oldPrompt = this.promptLabel.content;
-    
-    this.promptLabel.setContent(promptText);
-    const cleanPrompt = promptText.replace(/\x1b\[[0-9;]*m/g, "");
-    this.inputTextBox.left = cleanPrompt.length;
-    
-    this.inputTextBox.focus();
+    const oldLabel = (this.inputTextBox as any).label;
+    this.inputTextBox.setLabel(` \${promptText} `);
     this.screen.render();
+    this.inputTextBox.focus();
 
     return new Promise((resolve) => {
         this.inputTextBox.readInput((err, value) => {
             this.inputTextBox.clearValue();
-            this.drawPrompt(oldPrompt);
+            if (oldLabel) this.inputTextBox.setLabel(oldLabel);
+            this.screen.render();
             resolve(value || "");
         });
     });
