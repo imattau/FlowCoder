@@ -10,7 +10,6 @@ import { execSync } from "child_process";
 import { discoverProjectCommands, type ProjectCommands } from "./discovery.js";
 import { BlessedUIManager } from "./ui/blessed-ui-manager.js";
 import { calculateCodeMetrics } from "./utils/code-metrics.js";
-import ora from "ora";
 import chalk from "chalk";
 
 export class ChatLoop {
@@ -22,7 +21,7 @@ export class ChatLoop {
   private mcp: McpHost;
   private commandQueue: { name: string, parameters: any }[] = [];
   private ui: BlessedUIManager;
-  public isInterrupted: boolean = false; // Flag for interruption
+  public isInterrupted: boolean = false;
 
   constructor(
     private defaultEngine: InferenceEngine,
@@ -33,7 +32,7 @@ export class ChatLoop {
     this.guard = new CommandGuard(cwd);
     this.commands = discoverProjectCommands(cwd);
     this.ui = BlessedUIManager.getInstance();
-    this.mcp = new McpHost(); // Now McpHost will use the UI instance
+    this.mcp = new McpHost();
     this.agents = new AgentFactory({
         "default": defaultEngine,
         "tiny": tinyEngine
@@ -41,10 +40,7 @@ export class ChatLoop {
   }
 
   async init() {
-      // 1. Init MCP (will log to UI workspace now)
       await this.mcp.init();
-      
-      // 2. Prepend project summary
       const summary = this.stateManager.getProjectSummary();
       this.history.push({
           role: "system", 

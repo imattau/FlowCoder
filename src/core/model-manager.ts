@@ -33,16 +33,16 @@ export class ModelManager {
       return targetPath;
     }
 
-    const url = `https://huggingface.co/${repo}/resolve/main/${fileName}`;
-    this.ui.write(chalk.cyan(`Downloading model ${fileName} from ${repo}...`));
-    this.ui.write(chalk.dim(`URL: ${url}`));
+    const url = `https://huggingface.co/\${repo}/resolve/main/\${fileName}`;
+    this.ui.write(chalk.cyan(`Preparing to download \${fileName}...`));
     
     const response = await fetch(url);
 
     if (!response.ok) {
-      throw new Error(`Failed to download model: ${response.statusText} (${response.status})`);
+      throw new Error(`Failed to download model: \${response.statusText} (\${response.status})`);
     }
 
+    const contentLength = Number(response.headers.get("content-length"));
     if (!response.body) {
       throw new Error("Failed to download model: No response body");
     }
@@ -50,11 +50,21 @@ export class ModelManager {
     const writer = createWriteStream(targetPath);
     const nodeReadable = Readable.fromWeb(response.body as any);
     
+    let downloaded = 0;
+    nodeReadable.on("data", (chunk) => {
+        downloaded += chunk.length;
+        if (contentLength) {
+            const percent = (downloaded / contentLength) * 100;
+            this.ui.showProgressBar(`Downloading \${fileName}`, percent);
+        }
+    });
+
     nodeReadable.pipe(writer);
 
     await finished(writer);
     
-    this.ui.write(chalk.green(`\nSuccessfully downloaded ${fileName}`));
+    this.ui.hideProgressBar();
+    this.ui.write(chalk.green(`✔ Successfully downloaded \${fileName}`));
     return targetPath;
   }
 

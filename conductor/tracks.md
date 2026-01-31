@@ -25,6 +25,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 - [LSP Integration & Advanced Indexing](./tracks/lsp-indexing/index.md) - Integrating Language Server Protocol for precise code understanding.
 - [Terminal UI Framework Migration](./tracks/blessed-ui/index.md) - Migrating to the 'blessed' library for robust UI management.
 - [Status Bar & Contextual Indicators](./tracks/status-bar/index.md) - Displaying essential information below the command line.
+- [Visual Loading Indicators](./tracks/visual-indicators/index.md) - Adding spinners and progress bars for background tasks.
 - [Enhanced Terminal UI](./tracks/enhanced-ui/index.md) - Creating a bounded command line and working area.
 - [Universal Context Discovery](./tracks/universal-discovery/index.md) - Detecting and adopting context from other AI tools and project docs.
 - [Automated Reference Grounding](./tracks/ref-grounding/index.md) - Proactive dependency scanning and documentation auditing.

@@ -6,6 +6,10 @@ export class BlessedUIManager {
   public outputBox: blessed.Widgets.Log;
   public inputTextBox: blessed.Widgets.TextboxElement;
   public statusBar: blessed.Widgets.BoxElement;
+  private progressBar: blessed.Widgets.ProgressBarElement | null = null;
+  private spinnerInterval: NodeJS.Timeout | null = null;
+  private spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+  private spinnerFrameIndex = 0;
 
   private constructor() {
     this.screen = blessed.screen({
@@ -44,7 +48,6 @@ export class BlessedUIManager {
       valign: "bottom"
     });
 
-    // Simplified Input: Single widget with border and label
     this.inputTextBox = (blessed as any).textbox({
       parent: this.screen,
       bottom: 1,
@@ -81,10 +84,6 @@ export class BlessedUIManager {
       content: "Initializing..."
     });
 
-    this.screen.on("resize", () => {
-        this.screen.render();
-    });
-
     this.screen.render();
   }
 
@@ -106,6 +105,55 @@ export class BlessedUIManager {
     this.screen.render();
   }
 
+  startSpinner(message: string) {
+      this.stopSpinner();
+      this.spinnerInterval = setInterval(() => {
+          const frame = this.spinnerFrames[this.spinnerFrameIndex];
+          this.writeStatusBar(`\${frame} \${message}`);
+          this.spinnerFrameIndex = (this.spinnerFrameIndex + 1) % this.spinnerFrames.length;
+      }, 80);
+  }
+
+  stopSpinner(status?: string) {
+      if (this.spinnerInterval) {
+          clearInterval(this.spinnerInterval);
+          this.spinnerInterval = null;
+      }
+      if (status) {
+          this.writeStatusBar(status);
+      }
+  }
+
+  showProgressBar(label: string, percent: number) {
+      if (!this.progressBar) {
+          this.progressBar = blessed.progressbar({
+              parent: this.screen,
+              top: "center",
+              left: "center",
+              width: "50%",
+              height: 3,
+              border: "line",
+              style: {
+                  bar: { bg: "cyan" },
+                  border: { fg: "white" }
+              },
+              label: ` \${label} `,
+              filled: 0
+          });
+      }
+      this.progressBar.setLabel(` \${label} (\${Math.round(percent)}%) `);
+      this.progressBar.setProgress(percent);
+      this.screen.render();
+  }
+
+  hideProgressBar() {
+      if (this.progressBar) {
+          this.progressBar.destroy();
+          this.progressBar = null;
+          this.screen.render();
+      }
+  }
+
   drawPrompt(promptText: string) {
     this.inputTextBox.focus();
     this.inputTextBox.readInput();
@@ -120,7 +168,7 @@ export class BlessedUIManager {
 
     return new Promise((resolve) => {
         this.inputTextBox.readInput((err, value) => {
-            this.inputTextBox.setValue(""); // Explicitly clear value
+            this.inputTextBox.setValue("");
             if (oldLabel) this.inputTextBox.setLabel(oldLabel);
             this.screen.render();
             resolve(value || "");
