@@ -15,7 +15,6 @@ export class BlessedUIManager {
       title: "FlowCoder",
       fullUnicode: true,
       dockBorders: true,
-      // Focus the input box by default
       autoNextFocus: true
     });
 
@@ -66,14 +65,14 @@ export class BlessedUIManager {
     this.inputTextBox = (blessed as any).textbox({
       parent: this.inputContainer,
       top: 0,
-      left: 12, // Default offset for "flowcoder> "
+      left: 12, 
       height: 1,
       width: "100%-14",
       keys: true,
       mouse: false,
       inputOnFocus: true,
       style: {
-        fg: "white",
+        fg: "white", // Ensure text is visible
         bg: "black",
         focus: {
             fg: "white"
@@ -95,6 +94,19 @@ export class BlessedUIManager {
       content: "Initializing..."
     });
 
+    // Detect keypresses to change prompt color
+    this.inputTextBox.on("keypress", (ch: string, key: any) => {
+        const value = this.inputTextBox.value + (ch || "");
+        if (value.startsWith("/")) {
+            this.promptLabel.style.fg = "cyan";
+        } else if (value.startsWith("!")) {
+            this.promptLabel.style.fg = "yellow";
+        } else {
+            this.promptLabel.style.fg = "magenta";
+        }
+        this.screen.render();
+    });
+
     // Handle Resize
     this.screen.on("resize", () => {
         this.screen.render();
@@ -110,8 +122,6 @@ export class BlessedUIManager {
     return BlessedUIManager.instance;
   }
 
-  // Convert ANSI (Chalk) to Blessed tags if necessary, or just strip
-  // Blessed log widget actually supports ANSI codes if tags is true or if handled correctly
   write(text: string) {
     this.outputBox.log(text);
     this.outputBox.setScrollPerc(100);
@@ -123,18 +133,19 @@ export class BlessedUIManager {
     this.screen.render();
   }
 
-  // Set the prompt and prepare for input
   drawPrompt(promptText: string) {
     const cleanPrompt = promptText.replace(/\x1b\[[0-9;]*m/g, "");
     this.promptLabel.setContent(promptText);
     this.inputTextBox.left = cleanPrompt.length;
     this.inputTextBox.width = `100%-\${cleanPrompt.length + 2}`;
     
+    // Reset color to default
+    this.promptLabel.style.fg = "magenta";
+    
     this.inputTextBox.focus();
     this.screen.render();
   }
 
-  // Prompts for a single input (used for confirmations/questions)
   async getInputPrompt(promptText: string): Promise<string> {
     const oldPrompt = this.promptLabel.content;
     const oldLeft = this.inputTextBox.left;
@@ -142,9 +153,8 @@ export class BlessedUIManager {
     this.drawPrompt(promptText);
     
     return new Promise((resolve) => {
-        this.inputTextBox.once("submit", (value: string) => {
+        this.inputTextBox.readInput((err, value) => {
             this.inputTextBox.clearValue();
-            // Restore old prompt state
             this.drawPrompt(oldPrompt);
             this.inputTextBox.left = oldLeft;
             resolve(value || "");
