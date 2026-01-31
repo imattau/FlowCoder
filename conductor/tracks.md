@@ -12,6 +12,10 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [MCP Integration](./tracks/mcp-integration/index.md) - Migrating to Model Context Protocol for universal tool support.
 
+- [Prototyping & Templating](./tracks/prototyping-templates/index.md) - High-leverage tools for scaffolding and pattern-based generation.
+
+
+
 
 
 

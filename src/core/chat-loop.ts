@@ -104,8 +104,12 @@ export class ChatLoop {
         }
 
         // Confirmation
-        if (toolCall.name === "run_cmd" || toolCall.name === "cache_global_ref") {
-          const confirmed = await this.guard.confirmCommand(toolCall.name === "run_cmd" ? toolCall.parameters.command : `Cache URL ${toolCall.parameters.url} as '${toolCall.parameters.name}' globally`);
+        if (toolCall.name === "run_cmd" || toolCall.name === "cache_global_ref" || toolCall.name === "scaffold_project") {
+          const prompt = toolCall.name === "run_cmd" ? toolCall.parameters.command : 
+                       toolCall.name === "cache_global_ref" ? `Cache URL ${toolCall.parameters.url} as '${toolCall.parameters.name}' globally` :
+                       `Scaffold new ${toolCall.parameters.type} project named '${toolCall.parameters.name}'`;
+          
+          const confirmed = await this.guard.confirmCommand(prompt);
           if (!confirmed) {
             const msg = "User rejected tool execution.";
             console.log(chalk.yellow(`\n⚠ ${msg}`));

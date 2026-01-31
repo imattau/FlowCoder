@@ -10,6 +10,8 @@ export class PlannerAgent extends BaseAgent {
 "If the task involves a library you don't know perfectly, use inspect_library first.\n" +
 "If you find useful documentation, you can use cache_global_ref to save it for future use across all projects.\n" +
 "Check for existing global documentation using use_global_ref.\n" +
+"If starting a new project, use scaffold_project.\n" +
+"If creating common code patterns (components, routes), check list_templates and use apply_template.\n" +
 "If you need more information, use search, read_file, or fetch_url.\n" +
 "If you are ready to implement, use patch_file or write_file.\n" +
 "Always verify your work.";

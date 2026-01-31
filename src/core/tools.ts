@@ -3,8 +3,11 @@ import { join, relative } from "path";
 import { execSync } from "child_process";
 import * as diff from "diff";
 import { GlobalStateManager } from "./global-state.js";
+import { scaffoldProject, type ProjectType } from "./prototyping/scaffold.js";
+import { TemplateEngine } from "./prototyping/templates.js";
 
 const globalState = new GlobalStateManager();
+const templateEngine = new TemplateEngine();
 
 export interface Tool {
   name: string;
@@ -220,6 +223,44 @@ export const tools: Record<string, Tool> = {
         return `Error: Global reference '${args.name}' not found. Available: ${available || "None"}`;
       }
       return content;
+    }
+  },
+
+  scaffold_project: {
+    name: "scaffold_project",
+    description: "Initialize a new project structure using standard system tools.",
+    parameters: {
+      type: { type: "string", description: "The project type (node, rust, go, python)." },
+      name: { type: "string", description: "The name of the new project/directory." }
+    },
+    execute: (args: { type: ProjectType, name: string }) => {
+      return scaffoldProject(args.type, args.name);
+    }
+  },
+
+  apply_template: {
+    name: "apply_template",
+    description: "Generate code using a pre-defined template from the library.",
+    parameters: {
+      template_id: { type: "string", description: "ID of the template (e.g., 'react-component')." },
+      variables: { type: "object", description: "Key-value pairs for template variables." }
+    },
+    execute: (args: { template_id: string, variables: Record<string, string> }) => {
+      try {
+        return templateEngine.apply(args.template_id, args.variables);
+      } catch (err: any) {
+        return `Error applying template: ${err.message}`;
+      }
+    }
+  },
+
+  list_templates: {
+    name: "list_templates",
+    description: "List available code templates in the project library.",
+    parameters: {},
+    execute: () => {
+      const templates = templateEngine.listTemplates();
+      return templates.length > 0 ? templates.join("\n") : "No templates found.";
     }
   },
 
