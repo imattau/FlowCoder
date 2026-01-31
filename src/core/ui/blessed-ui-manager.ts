@@ -16,8 +16,11 @@ export class BlessedUIManager {
       fullUnicode: true,
       dockBorders: true,
       autoNextFocus: true,
-      // Setting transparency and omitting default colors allows system theme inheritance
-      transparent: true 
+      // Use 'default' to inherit terminal background/foreground
+      style: {
+          bg: "default",
+          fg: "default"
+      }
     });
 
     this.outputBox = blessed.log({
@@ -34,7 +37,8 @@ export class BlessedUIManager {
         style: { bg: "cyan" }
       } as any,
       style: {
-        // Omitting fg and bg to use terminal defaults
+        bg: "default",
+        fg: "default"
       },
       border: {
         type: "line",
@@ -50,6 +54,10 @@ export class BlessedUIManager {
         left: 0,
         width: "100%",
         height: 3,
+        style: {
+            bg: "default",
+            fg: "default"
+        },
         border: { type: "line", fg: "magenta" }
     });
 
@@ -60,6 +68,10 @@ export class BlessedUIManager {
         height: 1,
         width: "shrink",
         tags: true,
+        style: {
+            bg: "default",
+            fg: "magenta" // Keep prompt color
+        },
         content: ""
     });
 
@@ -75,10 +87,16 @@ export class BlessedUIManager {
       cursor: {
           artificial: true,
           shape: 'block',
-          blink: true
+          blink: true,
+          color: 'default'
       },
       style: {
-          // Inherit system colors
+          bg: "default",
+          fg: "default",
+          focus: {
+              bg: "default",
+              fg: "default"
+          }
       }
     });
 
@@ -90,7 +108,6 @@ export class BlessedUIManager {
       height: 1,
       tags: true,
       style: {
-        // Use inverse to make it stand out regardless of theme
         inverse: true 
       },
       content: "Initializing..."
