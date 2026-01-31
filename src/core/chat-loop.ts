@@ -41,39 +41,28 @@ export class ChatLoop {
 
   async init() {
       await this.mcp.init();
-      const summary = this.stateManager.getProjectSummary();
-      this.history.push({
-          role: "system", 
-          content: `You are resuming work on a project. ${summary}
-${PromptManager.getSystemPrompt(this.mcp.getTools())}` 
-      });
+  }
+
+  private getSystemContext(): string {
+      return PromptManager.getSystemPrompt(this.mcp.getTools());
   }
 
   private runVerification(): { success: boolean, output: string } {
     let combinedOutput = "";
     try {
-      combinedOutput += `[LINTING: ${this.commands.lint}]
-`;
+      combinedOutput += `[LINTING: ${this.commands.lint}]\n`;
       try {
         execSync(this.commands.lint, { encoding: "utf-8", stdio: "pipe" });
       } catch (e: any) {
-        combinedOutput += `Lint Failed:
-${e.stdout?.toString() || ""}
-${e.stderr?.toString() || ""}
-`;
+        combinedOutput += `Lint Failed:\n${e.stdout?.toString() || ""}\n${e.stderr?.toString() || ""}\n`;
       }
       
-      combinedOutput += `
-[BUILDING: ${this.commands.build}]
-`;
+      combinedOutput += `\n[BUILDING: ${this.commands.build}]\n`;
       execSync(this.commands.build, { encoding: "utf-8", stdio: "pipe" });
       
       return { success: true, output: combinedOutput };
     } catch (err: any) {
-      combinedOutput += `
-CRITICAL ERROR:
-${err.stdout?.toString() || ""}
-${err.stderr?.toString() || ""}`;
+      combinedOutput += `\nCRITICAL ERROR:\n${err.stdout?.toString() || ""}\n${err.stderr?.toString() || ""}`;
       return { success: false, output: combinedOutput };
     }
   }
@@ -83,8 +72,7 @@ ${err.stderr?.toString() || ""}`;
 
       this.ui.write(chalk.bold.yellow("\n📋 Proposed Command Queue:"));
       this.commandQueue.forEach((cmd, idx) => {
-          this.ui.write(`
-${idx + 1}. ${chalk.cyan(cmd.name)}(${chalk.dim(JSON.stringify(cmd.parameters))})`);
+          this.ui.write(`\n${idx + 1}. ${chalk.cyan(cmd.name)}(${chalk.dim(JSON.stringify(cmd.parameters))})`);
       });
 
       const answer = await this.ui.getInputPrompt(chalk.bold.magenta("\nExecute actions? [(a)ll / (s)tep / (c)ancel]: "));
@@ -96,9 +84,7 @@ ${idx + 1}. ${chalk.cyan(cmd.name)}(${chalk.dim(JSON.stringify(cmd.parameters))}
   }
 
   private async askUserPrompt(question: string): Promise<string> {
-      return await this.ui.getInputPrompt(chalk.bold.magenta(`
-❓ AI Question: ${question}
-Your answer: `));
+      return await this.ui.getInputPrompt(chalk.bold.magenta(`\n❓ AI Question: ${question}\nYour answer: `));
   }
 
   async processInput(input: string): Promise<void> {
@@ -111,47 +97,56 @@ Your answer: `));
     while (turnCount < maxTurns && !this.isInterrupted) {
       turnCount++;
       
+      const systemPrompt = this.getSystemContext();
+
+      // 1. INTENT ANALYSIS
       this.ui.writeStatusBar(chalk.gray("Status: Analyzing intent..."));
+      this.tinyEngine.loadInBackground(); 
       const intentAgent = this.agents.getAgent<IntentAgent>("intent");
-      const intent = await intentAgent.run(input);
-      this.ui.write(chalk.dim(`Intent: ${intent}
-`));
+      const intent = await intentAgent.run(`${systemPrompt}\n\nUser Request: ${input}`);
+      this.ui.write(chalk.dim(`Intent: ${intent}\n`));
       if (this.isInterrupted) throw new Error("User interrupted.");
 
+      // 2. CONTEXT GATHERING
       this.ui.writeStatusBar(chalk.gray("Status: Gathering context..."));
+      this.defaultEngine.loadInBackground();
       const contextAgent = this.agents.getAgent<ContextAgent>("context");
-      const contextResults = await contextAgent.run(input, intent);
+      const contextResults = await contextAgent.run(`${systemPrompt}\n\nTask: ${input}`, intent);
       if (this.isInterrupted) throw new Error("User interrupted.");
+      
       const contextTools = PromptManager.parseToolCalls(contextResults);
       for (const call of contextTools) {
-          this.ui.writeStatusBar(chalk.gray(`Status: Executing context tool ${call.name}`));
-          const res = await (tools[call.name] as any).execute(call.parameters);
+          this.ui.writeStatusBar(chalk.gray(`Status: Executing ${call.name}`));
+          const res = await (tools[call.name] || { execute: () => this.mcp.callTool(call.name, call.parameters) } as any).execute(call.parameters);
           this.history.push({ role: "system", content: PromptManager.formatToolResult(res) });
           if (this.isInterrupted) throw new Error("User interrupted.");
       }
 
+      // 3. DISPATCH & PLAN
       this.ui.writeStatusBar(chalk.gray("Status: Planning execution..."));
       const dispatcher = this.agents.getAgent<DispatcherAgent>("dispatcher");
-      const dispatchResponse = await dispatcher.run(input, this.history.map(h => `${h.role}: ${h.content}`));
+      const dispatchResponse = await dispatcher.run(`${systemPrompt}\n\n${this.stateManager.getProjectSummary()}\n${input}`, this.history.map(h => `${h.role}: ${h.content}`));
       if (this.isInterrupted) throw new Error("User interrupted.");
 
       this.stateManager.writeScratchpad(dispatchResponse);
-      await this.defaultEngine.unload();
-      if (this.isInterrupted) throw new Error("User interrupted.");
+      
+      if (!dispatchResponse.includes("BoilerplateAgent") && !dispatchResponse.includes("RefactorAgent")) {
+        await this.defaultEngine.unload();
+      }
 
       let finalTurnResponse = dispatchResponse;
       if (dispatchResponse.includes("PatchAgent")) {
-          this.ui.writeStatusBar(chalk.cyan("Status: Delegating to PatchAgent (Sniper)..."));
+          this.ui.writeStatusBar(chalk.cyan("Status: Delegating to PatchAgent..."));
           const patcher = this.agents.getAgent<any>("patcher");
-          finalTurnResponse = await patcher.run("Context updated in scratchpad.");
+          finalTurnResponse = await patcher.run(`${systemPrompt}\n\nContext updated in scratchpad. Execute.`);
       } else if (dispatchResponse.includes("BoilerplateAgent")) {
-          this.ui.writeStatusBar(chalk.cyan("Status: Delegating to BoilerplateAgent (Builder)..."));
+          this.ui.writeStatusBar(chalk.cyan("Status: Delegating to BoilerplateAgent..."));
           const builder = this.agents.getAgent<any>("boilerplate");
-          finalTurnResponse = await builder.run("Context updated in scratchpad.");
+          finalTurnResponse = await builder.run(`${systemPrompt}\n\nContext updated in scratchpad. Build.`);
       } else if (dispatchResponse.includes("TemplateAgent")) {
-          this.ui.writeStatusBar(chalk.cyan("Status: Delegating to TemplateAgent (Weaver)..."));
+          this.ui.writeStatusBar(chalk.cyan("Status: Delegating to TemplateAgent..."));
           const weaver = this.agents.getAgent<any>("template");
-          finalTurnResponse = await weaver.run("Context updated in scratchpad.");
+          finalTurnResponse = await weaver.run(`${systemPrompt}\n\nContext updated in scratchpad. Map.`);
       }
       if (this.isInterrupted) throw new Error("User interrupted.");
 
@@ -224,23 +219,18 @@ Your answer: `));
 
                 if (toolCall.name === "write_file" || toolCall.name === "patch_file") {
                   this.ui.writeStatusBar(chalk.cyan("Status: Auto-Verifying Changes..."));
+                  this.tinyEngine.loadInBackground();
                   const verification = this.runVerification();
                   if (verification.success) {
-                    this.ui.writeStatusBar(chalk.green("Status: Verification Passed."));
+                    this.ui.stopSpinner(chalk.green("✔ Verification Passed."));
                   } else {
-                    this.ui.writeStatusBar(chalk.red("Status: Verification Failed. Consulting Debugger..."));
+                    this.ui.stopSpinner(chalk.red("✖ Verification Failed."));
                     
                     const codeMetrics = calculateCodeMetrics(process.cwd());
-                    const metricsReport = `
---- Code Metrics Report ---
-Total Lines: ${codeMetrics.totalLines}
-Largest Files (lines):
-${codeMetrics.fileMetrics.sort((a: any,b: any) => b.lines - a.lines).slice(0, 5).map((m: any) => `  - ${m.file}: ${m.lines}`).join('\n')}
---- End Report ---
-`;
+                    const metricsReport = `\n--- Code Metrics Report ---\nTotal Lines: ${codeMetrics.totalLines}\nLargest Files (lines):\n${codeMetrics.fileMetrics.sort((a: any,b: any) => b.lines - a.lines).slice(0, 5).map((m: any) => `  - ${m.file}: ${m.lines}`).join('\n')}\n--- End Report ---\n`;
                     
                     const debuggerAgent = this.agents.getAgent<DebugAgent>("debugger");
-                    const analysis = await debuggerAgent.run(verification.output + metricsReport);
+                    const analysis = await debuggerAgent.run(`${systemPrompt}\n\n${verification.output}\n${metricsReport}`);
                     this.stateManager.writeScratchpad(analysis);
                     this.ui.write(chalk.magenta.bold("\n🔍 Debugger: ") + analysis + "\n");
                     this.history.push({ role: "system", content: `Debugger: ${analysis}` });
@@ -253,11 +243,9 @@ ${codeMetrics.fileMetrics.sort((a: any,b: any) => b.lines - a.lines).slice(0, 5)
               }
           }
       } else {
-          this.ui.writeStatusBar(chalk.gray("Status: Idle. Awaiting user input."));
           return;
       }
     }
-    this.ui.writeStatusBar(chalk.gray("Status: Idle. Awaiting user input."));
   }
 
   async cleanup() {

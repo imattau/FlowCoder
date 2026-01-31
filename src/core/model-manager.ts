@@ -33,13 +33,13 @@ export class ModelManager {
       return targetPath;
     }
 
-    const url = `https://huggingface.co/\${repo}/resolve/main/\${fileName}`;
-    this.ui.write(chalk.cyan(`Preparing to download \${fileName}...`));
+    const url = 'https://huggingface.co/' + repo + '/resolve/main/' + fileName;
+    this.ui.write(chalk.cyan('Preparing to download ' + fileName + '...'));
     
     const response = await fetch(url);
 
     if (!response.ok) {
-      throw new Error(`Failed to download model: \${response.statusText} (\${response.status})`);
+      throw new Error('Failed to download model: ' + response.statusText + ' (' + response.status + ')');
     }
 
     const contentLength = Number(response.headers.get("content-length"));
@@ -55,7 +55,7 @@ export class ModelManager {
         downloaded += chunk.length;
         if (contentLength) {
             const percent = (downloaded / contentLength) * 100;
-            this.ui.showProgressBar(`Downloading \${fileName}`, percent);
+            this.ui.showProgressBar('Downloading ' + fileName, percent);
         }
     });
 
@@ -64,7 +64,7 @@ export class ModelManager {
     await finished(writer);
     
     this.ui.hideProgressBar();
-    this.ui.write(chalk.green(`✔ Successfully downloaded \${fileName}`));
+    this.ui.write(chalk.green('✔ Successfully downloaded ' + fileName));
     return targetPath;
   }
 

@@ -10,7 +10,7 @@ export class InferenceEngine {
   private context: LlamaContext | null = null;
   private session: LlamaChatSession | null = null;
   private modelPath: string | null = null;
-  private loadPromise: Promise<void> | null = null; // To track ongoing loading
+  private loadPromise: Promise<void> | null = null;
   private status: ModelLoadStatus = "idle";
   private ui: BlessedUIManager;
   
@@ -28,9 +28,9 @@ export class InferenceEngine {
   private async performLoad() {
     if (!this.modelPath) throw new Error("Model path not set.");
 
-    const modelName = this.modelPath.split('/').pop();
-    this.ui.write(chalk.dim(`Loading model: \${modelName}...`));
-    this.ui.writeStatusBar(chalk.yellow(`Loading AI: \${modelName}...`));
+    const modelName = this.modelPath.split('/').pop() || 'model';
+    this.ui.write(chalk.dim('Loading model: ' + modelName + '...'));
+    this.ui.writeStatusBar(chalk.yellow('Loading AI: ' + modelName + '...'));
 
     try {
         const llama = await getLlama({
@@ -45,11 +45,11 @@ export class InferenceEngine {
           contextSequence: this.context.getSequence(),
         });
         this.status = "loaded";
-        this.ui.write(chalk.green(`✔ Model loaded: \${modelName}`));
+        this.ui.write(chalk.green('✔ Model loaded: ' + modelName));
         this.ui.writeStatusBar(chalk.gray("AI model ready."));
     } catch (err: any) {
         this.status = "idle";
-        this.ui.write(chalk.red(`✖ Failed to load model \${modelPath}: \${err.message}`));
+        this.ui.write(chalk.red('✖ Failed to load model ' + this.modelPath + ': ' + err.message));
         throw err;
     } finally {
         this.loadPromise = null;
@@ -59,7 +59,7 @@ export class InferenceEngine {
   async ensureLoaded() {
     if (this.status === "loaded") return;
     if (this.status === "loading" && this.loadPromise) {
-        return this.loadPromise; // Wait for ongoing load
+        return this.loadPromise;
     }
     this.status = "loading";
     this.loadPromise = this.performLoad();
@@ -67,7 +67,7 @@ export class InferenceEngine {
   }
 
   async loadInBackground() {
-    if (this.status !== "idle") return; // Already loading or loaded
+    if (this.status !== "idle") return;
     this.status = "loading";
     this.loadPromise = this.performLoad();
   }
@@ -100,11 +100,12 @@ export class InferenceEngine {
 
   async unload() {
       if (this.status === "loaded") {
+          const modelName = this.modelPath?.split('/').pop() || 'model';
           this.session = null;
           this.context = null;
           this.model = null;
           this.status = "idle";
-          this.ui.write(chalk.dim(`Model \${this.modelPath?.split('/').pop()} unloaded from memory.`));
+          this.ui.write(chalk.dim('Model ' + modelName + ' unloaded from memory.'));
       }
   }
 
